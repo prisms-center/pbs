@@ -31,7 +31,7 @@ Jobs not marked 'auto' are shown with the status "Check" in 'pstat' until the us
 * The 'pbs' module can be installed by placing it in your PYTHONPATH.
 * The scripts 'pstat', 'psub', and 'taskmaster' can be installed by placing in your PATH.
 * The scripts require the module 'argparse'.
-* On flux, you can use my installation by including ```/scratch/prismsproject_flux/bpuchala/Public/pythonmodules``` in your PYTHONPATH, and ```/scratch/prismsproject_flux/bpuchala/Public/scripts``` in your PATH
+* On flux, you can use my installation by including ```/scratch/prismsproject_flux/bpuchala/Public/pythonmodules``` in your PYTHONPATH, and ```/scratch/prismsproject_flux/bpuchala/Public/scripts``` in your PATH. It may be necessary to also run ```module load python/2.7.5```. This could be placed in your ```.bash_profile```.
 
 ### Documentation:
 
