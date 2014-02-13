@@ -1,0 +1,40 @@
+#!/usr/bin/env python
+import pbs, argparse, sys, subprocess
+
+parser = argparse.ArgumentParser(description='Automatically resubmit PBS jobs')
+parser.add_argument('-d','--delay', type=str, default="15:00", \
+  help='How long to delay ("[[[DD:]HH:]MM:]SS") between executions.  Default is "15:00".')
+parser.add_argument('-k','--kill', action='store_true', help='Kill the currently running taskmaster')
+
+args = parser.parse_args()
+
+if args.kill:
+    jobid = pbs.job_id(name="taskmaster")
+    if len(jobid) != 0:
+        pbs.delete(jobid[-1])
+else:
+    
+    # check if taskmaster already running (besides this one)
+    jobid = pbs.job_id(name="taskmaster")
+    tmaster_status = pbs.job_status(jobid)
+    for j in jobid:
+        if j != pbs.job_id():
+            if tmaster_status[j]["jobstatus"] != "C":
+                print "A taskmaster is already running. JobID:", j, "  Status:",  tmaster_status[j]["jobstatus"] 
+                sys.exit()
+    
+    # continue jobs
+    db = pbs.JobDB()
+    db.update()
+    db.continue_all()
+    db.close()
+    
+    # submit taskmaster
+    print "submit taskmaster"
+    j = pbs.PrismsDebugJob(nodes="1", ppn="1", name="taskmaster", \
+        exetime=pbs.exetime(args.delay), auto=False, message=None, \
+        command="pstat --continue\n" + "taskmaster " + ' '.join(sys.argv[1:]))
+    j.submit(add=False)
+    
+    #print "submit string:"
+    #print j.qsub_string()

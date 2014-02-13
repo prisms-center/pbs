@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+
+# This script submits a PBS script, as with 'qsub script.sh'
+# and adds the job to the pbs.JobDB job database
+
+import pbs, sys
+
+if len(sys.argv) != 2:
+    print "usage: psub PBS_SCRIPT"
+    sys.exit()
+if sys.argv[1] == "-h" or sys.argv[1] == "--help":
+    print "usage: psub PBS_SCRIPT"
+    sys.exit()
+
+#pbs.Job( qsubstr=open(sys.argv[1],"r").read() ).submit()
+
+qsubstr=open(sys.argv[1],"r").read()
+job = pbs.Job( qsubstr=qsubstr )
+db = jobdb.JobDB()
+pbs.submit(qsubstr)
+status = pbs.job_status_dict(  jobid = job.jobID, \
+                               jobname = job.name, \
+                               rundir = os.getcwd(), \
+                               auto = job.auto, \
+                               qsubstr = qsubstr, \
+                               walltime = pbs.seconds(job.walltime), \
+                               nodes = job.nodes, \
+                               procs = job.nodes*job.ppn)
+db.add(status)
+db.close()

@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+import sys, argparse
+import pbs
+
+parser = argparse.ArgumentParser(description='PBS Job Status')
+parser.add_argument('job', metavar='JOBID', type=str, nargs='*',help='Job IDs to query or operate on')
+style = parser.add_mutually_exclusive_group()
+style.add_argument('-f', '--full', default=False, action='store_true', help='List all fields instead of summary')
+style.add_argument('-s','--series', default=False, action='store_true', help='List all fields grouped by continuation jobs')
+group = parser.add_mutually_exclusive_group()
+select = group.add_mutually_exclusive_group()
+select.add_argument('-a', '--all', default=False, action='store_true', help='List all jobs in database, instead of just active jobs')
+#select.add_argument('--select', type=str, nargs='*', help='Postfix select statement. For more help, include with no arguments')
+group.add_argument('--complete', default=False, action='store_true', help='Mark jobs as \'Complete\'')
+group.add_argument('--continue', dest="cont", default=False, action='store_true', help='Re-submit auto jobs. By default, re-submit all')
+#group.add_argument('--note', type=str, nargs="+", help='Add notes about jobs')
+group.add_argument('--abort', default=False, action='store_true', help='Abort jobs') 
+group.add_argument('--error', metavar='ERRMSG', type=str, help='Add error message for jobs that failed')
+
+args = parser.parse_args()
+
+# open the Job database
+db = pbs.JobDB()
+db.update()
+
+# select which jobs to operate on
+if args.all:
+    job = db.select_all_id(series=args.series)
+else:
+    job = args.job
+    #if args.select:
+    #    job += db.select_id(args.select,series=args.series)
+
+# perform some operation
+if args.complete:
+    if args.job != []: # or args.select:
+        for j in job:
+            db.complete_job(j)
+elif args.cont:
+    if args.job != []: # or args.select:
+        for j in job:
+            db.continue_job(j)
+    else:
+        db.continue_all()
+#elif args.note:
+#    if args.job != []: # or args.select:
+#        for j in job:
+#            db.note_job(j, args.note)
+elif args.abort:
+    if args.job != []: # or args.select:
+        for j in job:
+            db.abort_job(j)
+elif args.error:
+    if args.job != []: # or args.select:
+        for j in job:
+            db.error_job(j, args.error)
+else:
+    if args.all:
+        db.print_all(full=args.full, series=args.series)
+    elif args.job != []: # or args.select:
+        if not args.full:
+            db.print_header()
+        for j in job:
+            db.print_job(j, full=args.full, series=args.series)
+    else:
+        db.print_active(full=args.full, series=args.series)
+
+# close the database
+db.close()
