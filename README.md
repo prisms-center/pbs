@@ -11,6 +11,24 @@ When submitted through this package or the included scripts, PBS jobs are stored
 Jobs are marked 'auto' either by submitting through the python class pbs.Job with the attribute ```auto=True```, or by submitting a PBS script which contains the line ```#auto=True``` using the included 'psub' script. 
 
 Jobs can be monitored using 'pstat', which is similar to qstat. All 'auto' jobs which have stopped can be resubmitted using ```pstat --continue```. 
+
+Example screen shot:
+```
+$ pstat
+
+
+Tracked:
+JobID        JobName                  Nodes Procs     Walltime S      Runtime Task                     A ContJobID   
+------------ ------------------------ ----- ----- ------------ - ------------ ------------------------ - ------------
+11791024     STDIN                      1     1     0:01:00:00 Q            - Incomplete               1 -           
+11791025     STDIN                      1     1     0:01:00:00 Q            - Incomplete               1 -           
+
+
+Untracked:
+JobID        JobName                  Nodes Procs     Walltime S      Runtime Task                     A ContJobID   
+------------ ------------------------ ----- ----- ------------ - ------------ ------------------------ - ------------
+11791026     taskmaster                 1     1     0:01:00:00 W   0:01:00:00 Untracked                0 -           
+```
     
 Additionally, when scheduling periodic jobs is not allowed other ways, the 'taskmaster' script can fully automate this process. 'taskmaster' executes ```pstat --continue``` and then re-submits itself to execute again periodically.
 
