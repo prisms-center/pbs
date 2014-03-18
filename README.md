@@ -70,24 +70,69 @@ Contains 4 submodules:
 #### pstat:
 From ```pstat -h```:
 ```            
-            usage: pstat [-h] [-f | -s]
-                         [-a | --complete | --continue | --abort | --error ERRMSG]
-                         [JOBID [JOBID ...]]
-            
-            PBS Job Status
-            
-            positional arguments:
-     	      JOBID           Job IDs to query or operate on
-            
-            optional arguments:
-              -h, --help      show this help message and exit
-              -f, --full      List all fields instead of summary
-              -s, --series    List all fields grouped by continuation jobs
-              -a, --all       List all jobs in database, instead of just active jobs
-              --complete      Mark jobs as 'Complete'
-              --continue      Re-submit auto jobs. By default, re-submit all
-              --abort         Abort jobs
-              --error ERRMSG  Add error message for jobs that failed
+usage: pstat [-h] [-f | -s] [-a | --range MINID MAXID | --recent DD:HH:MM:SS]
+             [--active]
+             [--complete | --continue | --reset | --abort | --error ERRMSG | --delete]
+             [JOBID [JOBID ...]]
+
+Print or modify PBS job and task status.
+
+By default, 'pstat' prints status for select jobs. Jobs are 
+selected by listing jobids or using --all, --range, or 
+--recent, optionally combined with --active. Running 'pstat'
+with no selection is equivalent to selecting '--all --active'. 
+The default display style is a summary list. Other options are
+--full or --series.
+
+Using one of --complete, --continue, --error, --abort, or 
+--delete modifies status instead of printing. User 
+confirmation is required before a modification is applied.
+
+Job status is as given by PBS for a single PBS job ('C', 'R', 
+'Q', etc.).
+
+Task status is user-defined and defines the status of a single
+PBS job within a possible series of jobs comprising some task. 
+'Auto' jobs may be re-submitted with the --continue option. 
+Please see: 
+             https://github.com/prisms-center/pbs
+for more information about 'auto' jobs.
+
+Possible values for task status are:
+  
+  "Complete":    Job and task are complete.
+  
+  "Incomplete":  Job or task are incomplete.
+  
+  "Continued":   Job is complete, but task was not complete. In
+                 this case, 'continuation_jobid' is set with 
+                 the jobid for the next job in the series of 
+                 jobs comprising some task.
+  
+  "Check":       Non-auto job is complete and requires user 
+                 input for status. 
+  
+  "Error:.*":    Some kind of error was noted.
+  
+  "Aborted":     The job and task have been aborted.
+
+positional arguments:
+  JOBID                 Job IDs to query or operate on
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -f, --full            List all fields instead of summary
+  -s, --series          List all fields grouped by continuation jobs
+  -a, --all             Select all jobs in database
+  --range MINID MAXID   A range of Job IDs (inclusive) to query or operate on
+  --recent DD:HH:MM:SS  Select jobs created or modified within given amout of time
+  --active              Select active jobs only. May be combined with --range and --recent
+  --complete            Mark jobs as 'Complete'
+  --continue            Re-submit auto jobs
+  --reset               Mark job as 'Incomplete'
+  --abort               Call qdel on job and mark as 'Aborted'
+  --error ERRMSG        Add error message.
+  --delete              Delete jobs from database. Aborts jobs that are still running.
 ```
 
 #### psub:
@@ -103,16 +148,18 @@ If the script contains a line which matches the python regex ```"auto=\s*(.*)\s"
 #### taskmaster:
 From ```taskmaster -h```:
 ```            
-            usage: taskmaster [-h] [-d DELAY] [-k]
-            
-            Automatically resubmit PBS jobs
-            
-            optional arguments:
-              -h, --help            show this help message and exit
-              -d DELAY, --delay DELAY
-                                    How long to delay ("[[[DD:]HH:]MM:]SS") between
-                                    executions. Default is "15:00".
-              -k, --kill            Kill the currently running taskmaster
+usage: taskmaster [-h] [-d DELAY] [--hold | --release | --kill]
+
+Automatically resubmit PBS jobs
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d DELAY, --delay DELAY
+                        How long to delay ("[[[DD:]HH:]MM:]SS") between
+                        executions. Default is "15:00".
+  --hold                Place a hold on the currently running taskmaster
+  --release             Release the currently running taskmaster
+  --kill                Kill the currently running taskmaster
 ```
         
 The 'taskmaster' script periodically monitors and re-submits 'auto' jobs as necessary until they are "Complete". It does this by executing ```pstat --continue```, and then submitting a PBS job that will execute 'taskmaster' with the same arguments but only becomes eligible DELAY about of time into the future. In this fastion it will continually monitor and re-submit 'auto' jobs until the finish. 'taskmaster' continues re-submitting itself until ```taskmaster --kill``` is executed.
