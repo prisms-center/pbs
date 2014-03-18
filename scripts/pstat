@@ -59,10 +59,16 @@ def operate(args, check_eligibility, operation, summary_msg, prompt_msg, action_
     # filter to find eligible jobs
     job = []
     for j in selection_id:
-        selected_job = db.select_job(j)
-        eligible, id, msg = check_eligibility(selected_job)
-        if eligible:
-            job.append(selected_job)
+        try:
+            selected_job = db.select_job(j)
+            eligible, id, msg = check_eligibility(selected_job)
+            if eligible:
+                job.append(selected_job)
+            else:
+                print id + ":", msg
+        except pbs.JobDBError as e:
+            print e
+        
     
     # print jobs to operate on:
     print summary_msg
@@ -73,15 +79,53 @@ def operate(args, check_eligibility, operation, summary_msg, prompt_msg, action_
         db.print_job(job=j, series=args.series)
     answer = None
     
-    # prompt user for confirmation
-    while answer != "yes" and answer != "no":
-        answer = raw_input(prompt_msg)
+    if args.force:
+        answer = "yes"
+    else:
+        # prompt user for confirmation
+        while answer != "yes" and answer != "no":
+            answer = raw_input(prompt_msg)
     
     # perform operation
     if answer == "yes" and job != []: # or args.select:
         for j in job:
             print action_msg, j["jobid"]
             operation(job = j)
+
+
+def print_data(args):
+    # user defined selection (don't show untracked)
+    jobid = select_job(args)
+    if jobid != []:
+        
+        # remove potential duplicates for series
+        if args.series:
+            seriesid = []
+            for j in jobid:
+                series = db.select_series_id(j)
+                if not series[-1] in seriesid:
+                    seriesid.append(series[-1])
+            jobid = seriesid
+        
+        # print rundir
+        if args.series:
+            for j in jobid:
+                series = db.select_series_id(j)
+                for s in series:
+                    try:
+                        job = db.select_job(s)
+                        print s, job[args.key[0]]
+                    except pbs.JobDBError as e:
+                        print e
+                print ""
+        else:
+            for j in jobid:
+                try:
+                    job = db.select_job(j)
+                    print j, job[args.key[0]]
+                except pbs.JobDBError as e:
+                    print e
+
 
 def print_jobs(args):
     if args.all and not args.active:
@@ -131,7 +175,8 @@ The default display style is a summary list. Other options are
 
 Using one of --complete, --continue, --error, --abort, or 
 --delete modifies status instead of printing. User 
-confirmation is required before a modification is applied.
+confirmation is required before a modification is applied,
+unless the --force option is given.
 
 
 Job status is as given by PBS for a single PBS job ('C', 'R', 
@@ -185,6 +230,9 @@ group.add_argument('--reset', default=False, action='store_true', help='Mark job
 group.add_argument('--abort', default=False, action='store_true', help='Call qdel on job and mark as \'Aborted\'') 
 group.add_argument('--error', metavar='ERRMSG', type=str, help='Add error message.')
 group.add_argument('--delete', default=False, action='store_true', help='Delete jobs from database. Aborts jobs that are still running.') 
+group.add_argument('--key', type=str, nargs=1, help='Output data corresponding to \'key\' for selected jobs.') 
+
+parser.add_argument('--force', default=False, action='store_true', help='Modify jobs without user confirmation')
 
 args = parser.parse_args()
 
@@ -238,6 +286,8 @@ elif args.error:
             "Jobs to be marked with an error:", \
             "Are you sure you want to mark the above jobs with an error? (yes/no): ", \
             "Marking job with an error:")
+elif args.key:
+    print_data(args)
 else:
     print_jobs(args)
 
