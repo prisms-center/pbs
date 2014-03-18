@@ -72,7 +72,8 @@ From ```pstat -h```:
 ```            
 usage: pstat [-h] [-f | -s] [-a | --range MINID MAXID | --recent DD:HH:MM:SS]
              [--active]
-             [--complete | --continue | --reset | --abort | --error ERRMSG | --delete]
+             [--complete | --continue | --reset | --abort | --error ERRMSG | --delete | --key KEY]
+             [--force]
              [JOBID [JOBID ...]]
 
 Print or modify PBS job and task status.
@@ -86,7 +87,8 @@ The default display style is a summary list. Other options are
 
 Using one of --complete, --continue, --error, --abort, or 
 --delete modifies status instead of printing. User 
-confirmation is required before a modification is applied.
+confirmation is required before a modification is applied,
+unless the --force option is given.
 
 Job status is as given by PBS for a single PBS job ('C', 'R', 
 'Q', etc.).
@@ -133,6 +135,19 @@ optional arguments:
   --abort               Call qdel on job and mark as 'Aborted'
   --error ERRMSG        Add error message.
   --delete              Delete jobs from database. Aborts jobs that are still running.
+  --key KEY             Output data corresponding to 'key' for selected jobs.
+  --force               Modify jobs without user confirmation
+```
+
+The following can be added to your ```.bash_profile``` or ```.bashrc``` file to make it easy to jump to a job's run directory:
+```
+# pgo: cd to the rundir of a job                                                                            
+#   usage:  `pgo jobid`                                                       
+#                                                                 
+pgo() {
+    cd $(pstat --key rundir $1 | cut -d " " -f 2)
+}
+
 ```
 
 #### psub:
