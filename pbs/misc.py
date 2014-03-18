@@ -1,5 +1,14 @@
 import subprocess, os, StringIO, re, datetime, time
 
+class PBSError(Exception):
+    def __init__(self, jobid, msg):
+        self.jobid = jobid
+        self.msg = msg
+    
+    def __str__(self):
+        return self.jobid + ": " + self.msg
+
+
 def getlogin():
     """Returns os.getlogin(), else os.environ["LOGNAME"], else "?" """
     try:
@@ -117,6 +126,8 @@ def job_id(all=False,name=None):
        Else, if all=True, returns a list of all job ids by current user. 
        Else, returns this job id from environment variable PBS_JOBID (split to get just the number).
        
+       Else, returns None
+       
     """
     if all or name != None:
         jobid = []
@@ -134,6 +145,7 @@ def job_id(all=False,name=None):
             return os.environ['PBS_JOBID'].split(".")[0]
         else:
             return None
+            #raise PBSError("?", "Could not determine jobid. 'PBS_JOBID' environment variable not found.\n" + str(os.environ))
 
 
 def job_rundir( jobid):
@@ -171,50 +183,92 @@ def job_status( jobid=None):
     """
     status = dict()
     
-    stdout = qstat(jobid=jobid)
+    stdout = qstat(jobid=jobid, full=True)
     sout = StringIO.StringIO(stdout)
+    
+    jobstatus = None
+    
     for line in sout:
-        jobstatus = dict()
         
-        results = line.split()
-        jobid = results[0].split(".")[0]
-        jobstatus["jobid"] = jobid
-        jobstatus["jobname"] = results[3]
-        jobstatus["nodes"] = int(results[5])
-        jobstatus["procs"] = int(results[6])
-        jobstatus["walltime"] = int(seconds(results[8]))
-        jobstatus["jobstatus"] = results[9]
-        jobstatus["qstatstr"] = None
-        jobstatus["elapsedtime"] = None
-        jobstatus["starttime"] = None
-        jobstatus["completiontime"] = None
-        elapsedtime = line.split()[10]
-        if elapsedtime == "--":
+        m = re.search("Job Id:\s*(.*)\s",line)
+        if m:
+            if jobstatus != None:
+                if jobstatus["jobstatus"] == "R":
+                    jobstatus["elapsedtime"] = int(time.time()) - jobstatus["starttime"]
+                status[jobstatus["jobid"]] = jobstatus
+            jobstatus = dict()
+            jobstatus["jobid"] = m.group(1).split(".")[0]
+            jobstatus["qstatstr"] = line
             jobstatus["elapsedtime"] = None
-        else:
-            jobstatus["elapsedtime"] = int(seconds(elapsedtime))
+            jobstatus["starttime"] = None
+            jobstatus["completiontime"] = None
+            continue
         
-        qstatstr = qstat(jobid, full=True)
-        if not re.match("^qstat: Unknown Job Id Error.*",qstatstr):
-            jobstatus["qstatstr"] = qstatstr
-            m = re.search("Job_Name = (.*)\n",qstatstr)
-            if m:
-                jobstatus["jobname"] = m.group(1)
+        jobstatus["qstatstr"] += line
+        
+        #results = line.split()
+        #jobid = results[0].split(".")[0]
+        #jobstatus = dict()
+        #jobstatus["jobid"] = jobid
+        
+        #jobstatus["jobname"] = results[3]
+        m = re.match("\s*Job_Name\s*=\s*(.*)\s",line)
+        if m:
+            jobstatus["jobname"] = m.group(1)
+            continue
+        
+        #jobstatus["nodes"] = int(results[5])
+        #jobstatus["procs"] = int(results[6])
+        m = re.match("\s*Resource_List\.nodes\s*=\s*(.*):ppn=(.*)\s",line)
+        if m:
+            jobstatus["nodes"] = m.group(1)
+            jobstatus["procs"] = int(m.group(1))*int(m.group(2))
+            continue
+        
+        #jobstatus["walltime"] = int(seconds(results[8]))
+        m = re.match("\s*Resource_List\.walltime\s*=\s*(.*)\s",line)
+        if m:
+            jobstatus["walltime"] = int(seconds(m.group(1)))
+            continue
+        
+        #jobstatus["jobstatus"] = results[9]
+        m = re.match("\s*job_state\s*=\s*(.*)\s",line)
+        if m:
+            jobstatus["jobstatus"] = m.group(1)
+            continue
+        
+        #elapsedtime = line.split()[10]
+        #if elapsedtime == "--":
+        #    jobstatus["elapsedtime"] = None
+        #else:
+        #    jobstatus["elapsedtime"] = int(seconds(elapsedtime))
+        #
+        #qstatstr = qstat(jobid, full=True)
+        #if not re.match("^qstat: Unknown Job Id Error.*",qstatstr):
+        #    jobstatus["qstatstr"] = qstatstr
+        #    m = re.search("Job_Name = (.*)\n",qstatstr)
+        #    if m:
+        #        jobstatus["jobname"] = m.group(1)
+        
+        #m = re.match("\s*resources_used.walltime\s*=\s*(.*)\s",line)
+        #if m:
+        #    print line
+        #    jobstatus["elapsedtime"] = int(seconds(m.group(1)))
             
-            m = re.search("start_time = (.*)\n",qstatstr)
-            if m:
-                jobstatus["starttime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
+        m = re.match("\s*start_time\s*=\s*(.*)\s",line)
+        if m:
+            jobstatus["starttime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
+            continue
             
-            m = re.search("comp_time = (.*)\n",qstatstr)
-            if m:
-                jobstatus["completiontime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
+        m = re.search("\s*comp_time\s*=\s*(.*)\s",line)
+        if m:
+            jobstatus["completiontime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
+            continue
         
-        #print "JobID:", jobid
-        #for k,val in jobstatus.iteritems():
-        #    print "  ", k, ":", val
-
-        
-        status[jobid] = jobstatus
+    if jobstatus != None:
+        if jobstatus["jobstatus"] == "R":
+            jobstatus["elapsedtime"] = int(time.time()) - jobstatus["starttime"]
+        status[jobstatus["jobid"]] = jobstatus
     
     return status
 
@@ -229,23 +283,46 @@ def submit(qsubstr):
     if m:
         jobname = m.group(1)
     else:
-        print "Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string."
-        sys.exit()
-     
+        raise PBSError("Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string.")
     
     p = subprocess.Popen("qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout,stderr = p.communicate(input=qsubstr)
     print stdout[:-1]
     if re.search("error", stdout):
-        return (1, stdout)
+        raise PBSError("PBS Submission error.\n" + stdout + "\n" + stderr)
     else:
-        jobID = stdout.split(".")[0]
-        return (0, jobID)
+        jobid = stdout.split(".")[0]
+        return jobid
 
 
 def delete(jobid):
     """qdel a PBS job."""
     p = subprocess.Popen(["qdel", jobid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout,stderr = p.communicate()
+    return p.returncode
+
+
+def hold(jobid):
+    """qhold a PBS job."""
+    p = subprocess.Popen(["qhold", jobid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout,stderr = p.communicate()
+    return p.returncode
+
+
+def release(jobid):
+    """qrls a PBS job."""
+    p = subprocess.Popen(["qrls", jobid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout,stderr = p.communicate()
+    return p.returncode
+
+
+def alter(jobid, arg):
+    """qalter a PBS job.
+    
+        'arg' is a pbs command option string. For instance, "-a 201403152300.19"
+    """
+    p = subprocess.Popen(["qalter"] + arg.split() + [jobid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout,stderr = p.communicate()
     return p.returncode
 
 

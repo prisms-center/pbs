@@ -11,8 +11,8 @@ class Job(object):
     Contains variables (with example values):
         name        "jobname"
         account     "prismsproject_flux"
-        nodes       "2"
-        ppn         "16"
+        nodes       2
+        ppn         16
         walltime    "10:00:00"
         pmem        "3800mb"
         queue       "flux"
@@ -57,10 +57,10 @@ class Job(object):
         self.account = account
         
         # number of nodes to request
-        self.nodes = nodes
+        self.nodes = int(nodes)
         
         # number of processors per node to request
-        self.ppn = ppn
+        self.ppn = int(ppn)
         
         # string walltime for job (HH:MM:SS) 
         self.walltime = walltime
@@ -131,7 +131,7 @@ class Job(object):
             s += "#PBS -l pmem={0}\n".format(self.pmem)
         s += "#PBS -l qos={0}\n".format(self.queue)
         s += "#PBS -q {0}\n".format(self.queue)
-        if self.email is not None:
+        if self.email != None and self.message != None:
             s += "#PBS -M {0}\n".format(self.email)
             s += "#PBS -m {0}\n".format(self.message)
         s += "#PBS -V\n"
@@ -166,17 +166,16 @@ class Job(object):
              message: error message if error, jobID if success
         
         """
-        result = misc.submit(qsubstr=self.qsub_string())
-        if result[0] == 0:
-            self.jobID = result[1]
-            if add:
-                db = jobdb.JobDB(dbpath=dbpath)
-                status = jobdb.job_status_dict(jobid = self.jobID, jobname = self.name, rundir = os.getcwd(), \
-                           jobstatus = "?", auto = self.auto, qsubstr = self.qsub_string(), \
-                           walltime = misc.seconds(self.walltime), nodes = self.nodes, procs = self.nodes*self.ppn)
-                db.add(status)
-                db.close()
-        return result
+        
+        self.jobID = misc.submit(qsubstr=self.qsub_string())
+        if add:
+            db = jobdb.JobDB(dbpath=dbpath)
+            status = jobdb.job_status_dict(jobid = self.jobID, jobname = self.name, rundir = os.getcwd(), \
+                       jobstatus = "?", auto = self.auto, qsubstr = self.qsub_string(), \
+                       walltime = misc.seconds(self.walltime), nodes = self.nodes, procs = self.nodes*self.ppn)
+            db.add(status)
+            db.close()
+        return 0
     
     
     def read(self, qsubstr):
