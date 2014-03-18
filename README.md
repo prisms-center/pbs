@@ -139,7 +139,7 @@ optional arguments:
   --force               Modify jobs without user confirmation
 ```
 
-The following can be added to your ```.bash_profile``` or ```.bashrc``` file to make it easy to jump to a job's run directory:
+```pstat``` can be used to make additional shortcut functions.  For example, the following can be added to your ```.bash_profile``` or ```.bashrc``` file to make it easy to jump to a job's run directory:
 ```
 # pgo: cd to the rundir of a job                                                                            
 #   usage:  `pgo jobid`                                                       
