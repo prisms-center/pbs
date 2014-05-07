@@ -12,6 +12,8 @@ def select_job(args):
         job = db.select_range_id(args.range[0], args.range[1])
     elif args.recent:
         job = db.select_recent_id(args.recent[0])
+    elif args.regex:
+        job = db.select_regex_id(args.regex[0], args.regex[1])
     elif args.job != []:
         job = args.job
     else:
@@ -221,6 +223,7 @@ select = parser.add_mutually_exclusive_group()
 select.add_argument('-a', '--all', default=False, action='store_true', help='Select all jobs in database')
 select.add_argument('--range', metavar=('MINID', 'MAXID'), type=str, nargs=2, help='A range of Job IDs (inclusive) to query or operate on')
 select.add_argument('--recent', metavar='DD:HH:MM:SS', type=str, nargs=1, help='Select jobs created or modified within given amout of time')
+select.add_argument('--regex', metavar('KEY', 'REGEX'). type=str, nargs=2, help='Select jobs where the value of column \'KEY\' matches the regular expression \'REGEX\'.') 
 
 parser.add_argument('--active', default=False, action='store_true', help='Select active jobs only. May be combined with --range and --recent')
 

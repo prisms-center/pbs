@@ -409,7 +409,15 @@ class JobDB(object):
         for r in sql_iter(self.curs):
             recent_job.append( r["jobid"] )
         return recent_job
-    
+
+
+    def select_regex_id(self, key, regex):
+        """ Return a list of all jobids in which the column 'key' matches the regular expression 'regex' """
+        job = []
+        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key,regex))
+        for r in sql_iter(self.curs):
+            job.append( r["jobid"] )
+        return job
     
     
     def select_series_id(self, jobid):
@@ -472,7 +480,18 @@ class JobDB(object):
             if r["continuation_jobid"] == "-":
                 recent_job.append(select_series_id(jobid))
         return recent_job
-    
+
+
+    def select_regex_series_id(self, key, regex):
+        """ Return a list of lists of jobids (one for each series) in which the column 
+            'key' matches the regular expression 'regex' 
+        """
+        job = []
+        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key, regex))
+        for r in sql_iter(self.curs):
+            if r["continuation_jobid"] == "-":
+                job.append(select_series_id(jobid))
+        return job
     
     
     
