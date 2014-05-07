@@ -43,7 +43,13 @@ def job_status_dict(   username = misc.getlogin(), \
                        walltime = None, \
                        elapsedtime = None, \
                        starttime = None, \
-                       completiontime = None):
+                       completiontime = None, \
+                       runstarttime = None, \
+                       runendtime = None, \
+                       infile = None, \
+                       outfile = None, \
+                       watchdir = None, \
+                       total_outfile = None):
     """Return a dict() with job_status fields.
     
        This is used to add records to the JobDB database through JobDB().add().
@@ -78,6 +84,22 @@ def job_status_dict(   username = misc.getlogin(), \
     status["starttime"] = starttime
     status["completiontime"] = completiontime
     status["modifytime"] = modifytime
+    
+    # integer s since the epoch
+    status["runstarttime"] = runstarttime
+    status["runendtime"] = runendtime
+    
+    # misc.FileList, stored in database as serialized list:
+    # "[ {'name':'filename_with_path', 'sha256':'hash_string'}, ... ]"
+    status["infile"] = infile
+    status["outfile"] = outfile
+    
+    # misc.WatchDirList, stored in database as serialized list objects
+    # "[ {'name':'directory_with_path', 'recurs'=True/False, 'files':[ {'name':'filename_with_path', 'sha256:'hash_string'}, ... ] }, ... ]"
+    status["watchdir"] = watchdir
+    
+    # misc.FileList, combination of 'outfile' and changes in watched directories
+    status["total_outfile"] = total_outfile
     
     return status
 
@@ -265,7 +287,10 @@ class JobDB(object):
             newstatus[f["jobid"]] = "C"
         
         # get job_status dict for all jobs found with qstat
-        active_status = misc.job_status()
+        try:
+            active_status = misc.job_status()
+        except OSError as e:
+            raise misc.PBSError("Could not obtain job status. Perhaps you are on a system without qstat.")
         
         # reset untracked
         self.untracked = []
@@ -410,6 +435,14 @@ class JobDB(object):
             recent_job.append( r["jobid"] )
         return recent_job
     
+    def select_regex_id(self, key, regex):
+        """ Return a list of all jobids in which the column 'key' matches the regular expression 'regex' """
+        job = []
+        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key,regex))
+        for r in sql_iter(self.curs):
+            job.append( r["jobid"] )
+        return job
+    
     
     
     def select_series_id(self, jobid):
@@ -472,6 +505,17 @@ class JobDB(object):
             if r["continuation_jobid"] == "-":
                 recent_job.append(select_series_id(jobid))
         return recent_job
+    
+    def select_regex_series_id(self, key, regex):
+        """ Return a list of lists of jobids (one for each series) in which the column 
+            'key' matches the regular expression 'regex' 
+        """
+        job = []
+        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key, regex))
+        for r in sql_iter(self.curs):
+            if r["continuation_jobid"] == "-":
+                job.append(select_series_id(jobid))
+        return job
     
     
     
@@ -727,6 +771,88 @@ class JobDB(object):
         self.conn.commit()
     
     
+    def eligible_to_start(self, job):
+        """ Check if job is eligible to be started 
+            
+            Jobs are eligible to start if:
+                taskstatus == "Incomplete"
+            
+            Args:
+                job: a sqlite3.Row, as obtained by self.select_job()
+            
+            Returns:
+                (0, jobid, None) if eligible
+                (1, jobid, msg) if not eligible
+        """
+        if job["taskstatus"] == "Incomplete":
+            return (True, job["jobid"], None)
+        return (False, job["jobid"], "Job not eligible to start. taskstatus = " + job["taskstatus"])
+    
+    
+    def start_job(self, jobid=None, job=None):
+        """ Set runstarttime, default runendtime from walltime, and
+            get hash for input files and files in watchdirs
+        """
+        
+        if job == None:
+            job = self.select_job(jobid)
+        
+        eligible, id, msg = self.eligible_to_begin(job)
+        if not eligible:
+            raise EligibilityError(id, msg)
+        
+        # set runstarttime and default endtime
+        job["runstarttime"] = time.time()
+        job["runendtime"] = job["runstarttime"] + job["walltime"]
+        
+        # set hash for input files and files in watchdirs
+        job["infile"].hash()
+        job["watchdir"].hash()
+        
+        self.curs.execute("UPDATE jobs SET modifytime=?, runstarttime=?, runendtime=?, infile=?, watchdir=? WHERE jobid=?", \
+                         ( int(time.time()), job["runstarttime"], job["runendtime"], job["infile"], job["watchdir"], job["jobid"]))
+        self.conn.commit()
+    
+    
+    def eligible_to_end(self, job):
+        """ Check if job is eligible to be ended 
+            
+            All jobs are eligible to be ended. (Jobs should mark their status and then be ended.)
+            This could be updated to only allow jobs that have been started and not yet ended.
+            
+            Args:
+                job: a sqlite3.Row, as obtained by self.select_job()
+            
+            Returns:
+                (0, jobid, None) if eligible
+                (1, jobid, msg) if not eligible
+        """
+        return (True, job["jobid"], None)
+    
+    
+    def end_job(self, jobid=None, job=None):
+        """Mark job ending runtime"""
+        
+        if job == None:
+            job = self.select_job(jobid)
+        
+        eligible, id, msg = self.eligible_to_end(job)
+        if not eligible:
+            raise EligibilityError(id, msg)
+        
+        now = time.time()
+        # make sure jobs don't end after their runstarttime + walltime 
+        if now > job["runendtime"]:
+            job["runendtime"] = now
+        
+        job["outfile"].hash()
+        job["total_outfile"] = job["outfile"]
+        job["total_outfile"].append(job["watchdir"].diff())
+        
+        self.curs.execute("UPDATE jobs SET modifytime=?, runtime=? WHERE jobid=?",( int(time.time()), job["runtime"], job["jobid"]))
+        self.conn.commit()
+    
+    
     
     
     def print_header(self):
@@ -932,6 +1058,61 @@ def error_job(message, jobid=None, dbpath=None):
     db.error_job(message, job=job)
     
     db.close()
+
+
+def start_job(jobid=None, dbpath=None, input=None, watchdir=None, watchdir_recurs=None):
+    """ Set job start time, input files, and watch_dir's existing files. 
+        
+        Args:
+            jobid:            jobid str of job to start. If not given, uses current job id from the
+                                environment variable 'PBS_JOBID'.
+            dbpath:           Path to JobDB database. If not given, use default database (see JobDB().__init__)
+            input:            path to input files
+            watchdir:        path to directories where output will be written, if auto checking for changes in a directory
+            watchdir_recurs: path to directories where output will be written, if auto checking for changes
+                                in a directory and subdirectories
+    """
+    if jobid == None:
+        jobid = misc.job_id()
+        if jobid == None:
+            raise PBSError("Could not determine jobid") 
+    db = JobDB(dbpath)
+    
+    try:
+        job = db.select_job(jobid)
+    except JobDBError as e:
+        raise e
+    
+    db.start_job(job=job, input=input, watchdir=watchdir, watchdir_recurs=watchdir_recurs)
+    
+    db.close()
+
+
+def end_job(jobid=None, dbpath=None, output=None):
+    """ Set job end time, output files, and scan watch_dir's for new and modified files. 
+        
+        Args:
+            jobid:            jobid str of job to start. If not given, uses current job id from the
+                                environment variable 'PBS_JOBID'.
+            dbpath:           Path to JobDB database. If not given, use default database (see JobDB().__init__)
+            output:           path to output files
+    """
+    if jobid == None:
+        jobid = misc.job_id()
+        if jobid == None:
+            raise PBSError("Could not determine jobid") 
+    db = JobDB(dbpath)
+    
+    try:
+        job = db.select_job(jobid)
+    except JobDBError as e:
+        raise e
+    
+    db.end_job(job=job, output=output)
+    
+    db.close()
+
+
 
 
 

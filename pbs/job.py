@@ -41,6 +41,10 @@ class Job(object):
                        priority = "0", \
                        command = None, \
                        auto = False, \
+                       input = [], \
+                       output = [], \
+                       watchdir = [], \
+                       watchdir_recurs = [], \
                        qsubstr = None):
         
         if qsubstr != None:
@@ -105,6 +109,18 @@ class Job(object):
         # 'auto' jobs should set JobDB status to "finished" when finished
         self.auto = bool(auto)
         
+        # list of files (with path) to save as input files
+        self.input = input
+        
+        # list of files (with path) to save as output files
+        self.output = output
+        
+        # list of directories to watch for changes to save as output files
+        self.watchdir = watchdir
+        
+        # list of directories (includes subdirectories) to watch for changes to save as output files
+        self.watchdir_recurs = watchdir_recurs
+        
         #self.date_time
         
         ##################################
@@ -137,10 +153,20 @@ class Job(object):
         s += "#PBS -V\n"
         s += "#PBS -p {0}\n\n".format(self.priority)
         s += "#auto={0}\n\n".format(self.auto)
+        if input != []:
+            s += "#input={0}\n\n".format(" ".join(self.input))
+        if output != []:
+            s += "#output={0}\n\n".format(" ".join(self.output))
+        if watchdir != []:
+            s += "#watchdir={0}\n\n".format(" ".join(self.watchdir))
+        if watchdir_recurs != []:
+            s += "#input={0}\n\n".format(" ".join(self.input))
         s += "echo \"I ran on:\"\n"
         s += "cat $PBS_NODEFILE\n\n"
         s += "cd $PBS_O_WORKDIR\n"
+        s += "pstart"
         s += "{0}\n".format(self.command)
+        s += "pend"
         
         return s
     
@@ -183,7 +209,7 @@ class Job(object):
         
            Will read many but not all valid PBS scripts.
            Will ignore any arguments not included in pbs.Job()'s attributes.
-           Will add default optional arguments (-A, -a, -l pmem=(.*), -M, -m, -p, "Auto:") if not found
+           Will add default optional arguments (-A, -a, -l pmem=(.*), -M, -m, -p, "auto=", "input=", "output=", "watchdir=", "watchdir_recurs=") if not found
            Will exit() if required arguments (-N, -l walltime=(.*), -l nodes=(.*):ppn=(.*), -q, cd $PBS_O_WORKDIR) not found
            Will always include -V
            
@@ -195,6 +221,10 @@ class Job(object):
         self.message = "a"
         self.priority = "0"
         self.auto = False
+        self.input = []
+        self.output = []
+        self.watchdir = []
+        self.watchdir_recurs = []
         self.account = None
         self.exetime = None
         
@@ -205,6 +235,10 @@ class Job(object):
         optional["message"] = "Default: a"
         optional["priority"] = "Default: 0"
         optional["auto"] = "Default: False"
+        optional["input"] = "Default: []"
+        optional["output"] = "Default: []"
+        optional["watchdir"] = "Default: []"
+        optional["watchdir_recurs"] = "Default: []"
         optional["exetime"] = "Default: None"
         
         required = dict()
@@ -290,10 +324,34 @@ class Job(object):
                     print "Error in pbs.Job().read(). '#auto=' argument not understood:", line
                     sys.exit()
             
+            m = re.search("input=\s*(.*)\s", line)
+            if m:
+                self.input = [os.path.abspath(x) for x in m.group(1).split()]
+                optional["input"] = self.input
+            
+            m = re.search("output=\s*(.*)\s", line)
+            if m:
+                self.output = [os.path.abspath(x) for x in m.group(1).split()]
+                optional["output"] = self.output
+            
+            m = re.search("watchdir=\s*(.*)\s", line)
+            if m:
+                self.watchdir = [os.path.abspath(x) for x in m.group(1).split()]
+                optional["watchdir"] = self.watchdir
+            
+            m = re.search("watchdir_recurs=\s*(.*)\s", line)
+            if m:
+                self.watchdir_recurs = [os.path.abspath(x) for x in m.group(1).split()]
+                optional["watchdir_recurs"] = self.watchdir_recurs
+            
             m = re.search("cd\s+\$PBS_O_WORKDIR\s+", line)
             if m:
                 required["cd $PBS_O_WORKDIR"] = "Found"
-                self.command = s.read()
+                self.command = ""
+                for line in s: 
+                    m = re.match("pstart|pend", line)
+                    if not m:
+                        self.command += line
                 required["command"] = self.command
                 break
         # end for

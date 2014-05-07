@@ -2,4 +2,5 @@
 from job import *
 from jobdb import *
 from misc import *
+from file import *
 from templates import *

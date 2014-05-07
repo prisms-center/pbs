@@ -1,12 +1,11 @@
 import subprocess, os, StringIO, re, datetime, time
 
 class PBSError(Exception):
-    def __init__(self, jobid, msg):
-        self.jobid = jobid
+    def __init__(self, msg):
         self.msg = msg
     
     def __str__(self):
-        return self.jobid + ": " + self.msg
+        return self.msg
 
 
 def getlogin():
@@ -124,7 +123,7 @@ def qstat(jobid=None, username=getlogin(), full=False):
 def job_id(all=False,name=None):
     """If 'name' given, returns a list of all jobs with a particular name using qstat.
        Else, if all=True, returns a list of all job ids by current user. 
-       Else, returns this job id from environment variable PBS_JOBID (split to get just the number).
+       Else, returns this job id from environment variable JOBDB_ID (if it exists) or PBS_JOBID (split to get just the number).
        
        Else, returns None
        
@@ -141,11 +140,12 @@ def job_id(all=False,name=None):
                 jobid.append( (line.split()[0]).split(".")[0] )
         return jobid
     else:
-        if 'PBS_JOBID' in os.environ: 
+        if 'JOBDB_ID' in os.environ: 
+            return os.environ['JOBDB_ID']
+        elif 'PBS_JOBID' in os.environ: 
             return os.environ['PBS_JOBID'].split(".")[0]
         else:
             return None
-            #raise PBSError("?", "Could not determine jobid. 'PBS_JOBID' environment variable not found.\n" + str(os.environ))
 
 
 def job_rundir( jobid):
