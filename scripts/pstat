@@ -135,7 +135,7 @@ def print_jobs(args):
         #    show all and untracked
         db.print_all(full=args.full, series=args.series)
         db.print_untracked(full=args.full)
-    elif not args.all and not args.range and not args.recent and args.job == []:
+    elif not args.all and not args.range and not args.recent and not args.regex and args.job == []:
         # default 'pstat' case with no selection
         #   show active and untracked
         db.print_active(full=args.full, series=args.series)
@@ -223,7 +223,7 @@ select = parser.add_mutually_exclusive_group()
 select.add_argument('-a', '--all', default=False, action='store_true', help='Select all jobs in database')
 select.add_argument('--range', metavar=('MINID', 'MAXID'), type=str, nargs=2, help='A range of Job IDs (inclusive) to query or operate on')
 select.add_argument('--recent', metavar='DD:HH:MM:SS', type=str, nargs=1, help='Select jobs created or modified within given amout of time')
-select.add_argument('--regex', metavar('KEY', 'REGEX'). type=str, nargs=2, help='Select jobs where the value of column \'KEY\' matches the regular expression \'REGEX\'.') 
+select.add_argument('--regex', metavar=('KEY', 'REGEX'), type=str, nargs=2, help='Select jobs where the value of column \'KEY\' matches the regular expression \'REGEX\'.') 
 
 parser.add_argument('--active', default=False, action='store_true', help='Select active jobs only. May be combined with --range and --recent')
 

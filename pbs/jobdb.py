@@ -155,6 +155,9 @@ def sql_iter(curs, arraysize=1000):
                 yield r
 
 
+def regexp( pattern, string):
+    return re.match(pattern, string) is not None
+
 class JobDB(object):
     """A PBS Job Database object"""
 
@@ -218,12 +221,14 @@ class JobDB(object):
             print "Creating Database:", dbpath
             self.conn = sqlite3.connect(dbpath)
             self.conn.row_factory = sqlite3.Row
+            self.conn.create_function("REGEXP",2,regexp)
             self.curs = self.conn.cursor()
             self.curs.execute("CREATE TABLE jobs " + sql_create_str())
             self.conn.commit()
         else:
             self.conn = sqlite3.connect(dbpath)
             self.conn.row_factory = sqlite3.Row
+            self.conn.create_function("REGEXP",2,regexp)
             self.curs = self.conn.cursor()
         
     
@@ -414,9 +419,13 @@ class JobDB(object):
     def select_regex_id(self, key, regex):
         """ Return a list of all jobids in which the column 'key' matches the regular expression 'regex' """
         job = []
-        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key,regex))
-        for r in sql_iter(self.curs):
-            job.append( r["jobid"] )
+        if( key in job_status_dict()):
+            self.curs.execute("SELECT jobid FROM jobs WHERE " + key + " REGEXP ?",(regex,))
+            for r in sql_iter(self.curs):
+                job.append( r["jobid"] )
+        else:
+            raise JobDBError(key + " not a valid key")
+        
         return job
     
     
@@ -486,11 +495,16 @@ class JobDB(object):
         """ Return a list of lists of jobids (one for each series) in which the column 
             'key' matches the regular expression 'regex' 
         """
+        
         job = []
-        self.curs.execute("SELECT jobid FROM jobs WHERE ? REGEXP ?",(key, regex))
-        for r in sql_iter(self.curs):
-            if r["continuation_jobid"] == "-":
-                job.append(select_series_id(jobid))
+        if( key in job_status_dict()):
+            self.curs.execute("SELECT jobid FROM jobs WHERE " + key + " REGEXP ?",(regex))
+            for r in sql_iter(self.curs):
+                if r["continuation_jobid"] == "-":
+                    job.append(select_series_id(jobid))
+        else:
+            raise JobDBError(key + " not a valid key")
+        
         return job
     
     
