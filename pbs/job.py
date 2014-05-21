@@ -191,13 +191,15 @@ class Job(object):
            add: Should this job be added to the JobDB database?
            dbpath: Specify a non-default JobDB database
            
-           Returns a tuple: (returnCode, message)
-             returnCode: 0 for success, 1 for error
-             message: error message if error, jobID if success
+           Raises PBSError if error submitting the job.
         
         """
         
-        self.jobID = misc.submit(qsubstr=self.qsub_string())
+        try:
+            self.jobID = misc.submit(qsubstr=self.qsub_string())
+        except PBSError as e:
+            raise e
+        
         if add:
             db = jobdb.JobDB(dbpath=dbpath)
             
@@ -218,7 +220,6 @@ class Job(object):
                        watchdir = file.WatchDirList(wlist).serialize())
             db.add(status)
             db.close()
-        return 0
     
     
     def read(self, qsubstr):
