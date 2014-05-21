@@ -21,6 +21,10 @@ class Job(object):
         priority    "-200"
         command     "echo \"hello\" > test.txt"
         auto        True
+        input               ["in1.txt", "path/to/in2.txt"]
+        output              ["out1.txt", "path/to/out2.txt"]
+        watchdir            ["dir1", "path/to/dir2"]
+        watchdir_recurs     ["dir1", "path/to/dir2"]
         
         Only set to auto=True if the 'command' uses this pbs module to set itself as completed when it is completed.
            Otherwise, you may submit it extra times leading to wasted resources and overwritten data.
@@ -115,10 +119,10 @@ class Job(object):
         # list of files (with path) to save as output files
         self.output = output
         
-        # list of directories to watch for changes to save as output files
+        # list of directories (with path) to watch for changes to save as output files
         self.watchdir = watchdir
         
-        # list of directories (includes subdirectories) to watch for changes to save as output files
+        # list of directories (with path, including subdirectories) to watch for changes to save as output files
         self.watchdir_recurs = watchdir_recurs
         
         #self.date_time
@@ -160,13 +164,13 @@ class Job(object):
         if watchdir != []:
             s += "#watchdir={0}\n\n".format(" ".join(self.watchdir))
         if watchdir_recurs != []:
-            s += "#input={0}\n\n".format(" ".join(self.input))
+            s += "#watchdir_recurs={0}\n\n".format(" ".join(self.watchdir_recurs))
         s += "echo \"I ran on:\"\n"
         s += "cat $PBS_NODEFILE\n\n"
         s += "cd $PBS_O_WORKDIR\n"
-        s += "pstart"
+        s += "python -c \"import pbs; pbs.start_job()\""
         s += "{0}\n".format(self.command)
-        s += "pend"
+        s += "python -c \"import pbs; pbs.end_job()\""
         
         return s
     
@@ -196,9 +200,22 @@ class Job(object):
         self.jobID = misc.submit(qsubstr=self.qsub_string())
         if add:
             db = jobdb.JobDB(dbpath=dbpath)
-            status = jobdb.job_status_dict(jobid = self.jobID, jobname = self.name, rundir = os.getcwd(), \
-                       jobstatus = "?", auto = self.auto, qsubstr = self.qsub_string(), \
-                       walltime = misc.seconds(self.walltime), nodes = self.nodes, procs = self.nodes*self.ppn)
+            
+            wlist = [file.WatchDir(name=wd, recursive=False, filelist=[]) for wd in self.watchdir] + \
+                    [file.WatchDir(name=wd, recursive=True, filelist=[]) for wd in self.watchdir_recurs]
+            
+            status = jobdb.job_status_dict(jobid = self.jobID, \
+                       jobname = self.name, \
+                       rundir = os.getcwd(), \
+                       jobstatus = "?", \
+                       auto = self.auto, \
+                       qsubstr = self.qsub_string(), \
+                       walltime = misc.seconds(self.walltime), \
+                       nodes = self.nodes, \
+                       procs = self.nodes*self.ppn, \
+                       input = file.FileList(self.input).serialize(), \
+                       output = file.FileList(self.output).serialize(), \
+                       watchdir = file.WatchDirList(wlist).serialize())
             db.add(status)
             db.close()
         return 0

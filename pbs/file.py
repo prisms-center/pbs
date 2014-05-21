@@ -12,23 +12,63 @@ def hash_sha256(name):
 
 
 class File(object):
-    def __init__(self, name, sha256=None):
+    """ Class to track file changes 
+        
+        if (the two files' name, size, and mtime are the same):
+            assume equivalent
+        elif (the two files' sha256 hash is the same):
+            assume equivalent
+        else:
+            assume inequivalent
+            
+    """
+    def __init__(self, name=None, size=None, mtime=None, sha256=None):
         self.name = os.path.abspath(name)
-        self.sha256 = sha256
+        self.size = size
+        self.mtime = mtime
+        self.sha256 = None
     
     
     def __eq__(self, f):
-        if self.name == f.name and self.sha256 == f.sha256:
-            return True
+        if self.name == f.name:
+            if self.size == f.size and self.mtime == f.mtime :
+                return True
+            else:
+                if self.sha256 == None:
+                    self.hash()
+                if f.sha256 == None:
+                    f.hash()
+                if self.sha256 == f.sha256:
+                    return True
         return False
+    
+    
+    def startpoint(self):
+        self.hash()
+        self.stat()
+    
+    
+    def endpoint(self):
+        self.stat()
     
     
     def hash(self):
         self.sha256 = hash_sha256(self.name)
     
     
+    def stat(self):
+        self.size = os.path.getsize(self.name)
+        self.mtime = os.path.getmtime(self.name)
+    
+    
     def serialize(self):
-        return json.dumps({'name':f.name,'sha256':f.sha256})
+        return json.dumps(self.__dict__)
+    
+    @staticmethod
+    def deserialize(json_str):
+        return File(**json.loads(json_str))
+
+    
 
 
 class FileList(object):
@@ -38,10 +78,14 @@ class FileList(object):
         elif isinstance(filelist, FileList):
             self.filelist = list(filelist.filelist)
         elif isinstance(filelist, list):
-            for f in filelist:
-                if not isinstance(f, File):
+            self.filelist = filelist
+            for i in range(len(self.filelist)):
+                if isinstance(self.filelist[i], File):
+                    pass
+                elif isinstance(self.filelist[i], str):
+                    self.filelist[i] = File(name = self.filelist[i])
+                else:
                     raise PBSError("Can not initialize FileList. 'filelist' is a list of invalid type " + f.__class__.__name__)
-            self.filelist = list(filelist)
         else:
             raise PBSError("Can not initialize FileList. 'filelist' is a list of invalid type " + f.__class__.__name__)
     
@@ -64,13 +108,28 @@ class FileList(object):
             raise misc.PBSError("Can not append an object of type " + val.__class__.__name__ + "to a FileList.")
     
     
+    def startpoint(self):
+        for file in self.filelist:
+            file.startpoint()
+    
+    
+    def endpoint(self):
+        for file in self.filelist:
+            file.endpoint()
+    
+    
     def serialize(self):
-        return json.dumps([f.__dict__() for f in self.filelist])
+        return json.dumps({"filelist":[f.__dict__ for f in self.filelist]})
+    
+    
+    @staticmethod
+    def deserialize(json_str):
+        return FileList([File(**f) for f in json.loads(json_str)['filelist'] ])
     
     
     def __conform__(self, protocol):
         if protocol is sqlite3.PrepareProtocol:
-            return json.dumps(self.serialize())
+            return self.serialize()
 
 
 class WatchDir(object):
@@ -93,15 +152,31 @@ class WatchDir(object):
     def serialize(self):
         return json.dumps({'name':self.name, 'recursive':self.recursive, 'filelist':self.filelist.serialize()})
     
+    @staticmethod
+    def deserialize(json_str):
+        d = json.loads(json_str)
+        d['filelist'] = FileList.deserialize( d['filelist'])
+        return WatchDir(**d)
+    
     
     def __conform__(self, protocol):
         if protocol is sqlite3.PrepareProtocol:
-            return json.dumps(self.serialize())
+            return self.serialize()
     
     
-    def hash(self):
+    def startpoint(self):
+        self.setpoint(start = True)
+    
+    
+    def endpoint(self):
+        self.setpoint(start = False)
+    
+    
+    def setpoint(self, start=False):
         """ Look through the directory (and subdirectories if recursive==True),
-            and save a filelist containing all files and their hash values.
+            and save a filelist containing all files.
+            
+            If 'start' == True, also save the files' hash values.
         """
         self.filelist = FileList()
         if self.recursive:
@@ -109,22 +184,24 @@ class WatchDir(object):
                 for filename in files:
                     filepath = os.path.abspath(os.path.join(root,filename))
                     file = File(filepath)
-                    file.hash()
+                    if start == True:
+                        file.hash()
                     self.filelist.append(file)
         else:
             for item in os.listdir(self.name):
                 filepath = os.path.abspath( os.path.join(self.name, item))
                 if os.path.isfile( filepath):
                     file = File(filepath)
-                    file.hash()
+                    if start == True:
+                        file.hash()
                     self.filelist.append(file)
                 
     
     def diff(self):
         """ Returns a filelist containing new and modified files in the watched path """
         current = WatchDir(self.name, self.recursive)
-        current.hash()
-        return FileList([File(f.name, f.sha256) for f in current.filelist if (f not in self.filelist)])
+        current.endpoint()
+        return FileList([f for f in current.filelist if (f not in self.filelist)])
 
 
 class WatchDirList(object):
@@ -148,8 +225,25 @@ class WatchDirList(object):
         return len(self.dirlist)
     
     
+    def startpoint(self):
+        for d in self.dirlist():
+            d.startpoint()
+    
+    
+    def endpoint(self):
+        for d in self.dirlist():
+            d.endpoint()
+    
+    
     def serialize(self):
-        return json.dumps([f.serialize() for f in self.dirlist])
+        return json.dumps({"dirlist":[d.serialize() for d in self.dirlist]})
+    
+    
+    @staticmethod
+    def deserialize(json_str):
+        wdl = json.loads(json_str)
+        wdl["dirlist"] = [ WatchDir.deserialize(wd) for wd in wdl["dirlist"] ]
+        return WatchDirList(**wdl)
     
     
     def __conform__(self, protocol):

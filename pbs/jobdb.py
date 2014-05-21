@@ -18,10 +18,6 @@ class EligibilityError(Exception):
         return self.jobid + ": " + self.msg
 
 
-# columns in database (see job_status_dict()):
-# username, hostname, jobid, jobname, rundir, jobstatus, auto, taskstatus, continuation_jobid, qsubstr, 
-# qstatstr, nodes, proc, walltime, starttime, completiontime, elapsedtime
-
 # allowed values (not checked at this time):
 # taskstatus = ["Incomplete","Complete","Continued","Check","Error:.*","Aborted"]
 # jobstatus = ["C","Q","R","E","W","H","M"]
@@ -89,13 +85,15 @@ def job_status_dict(   username = misc.getlogin(), \
     status["runstarttime"] = runstarttime
     status["runendtime"] = runendtime
     
-    # misc.FileList, stored in database as serialized list:
-    # "[ {'name':'filename_with_path', 'sha256':'hash_string'}, ... ]"
+    
+    # Use this for explicitly listed files to track:
+    #   serialized file.FileList:
+    #   "[ {'name':'filename_with_path', 'size':'filesize', 'mtime':'file modification time', 'sha256':'hash_string'}, ... ]"
     status["infile"] = infile
     status["outfile"] = outfile
     
-    # misc.WatchDirList, stored in database as serialized list objects
-    # "[ {'name':'directory_with_path', 'recurs'=True/False, 'files':[ {'name':'filename_with_path', 'sha256:'hash_string'}, ... ] }, ... ]"
+    # serialized file.WatchDirList:
+    # "[ {'name':'directory_with_path', 'recurs'=True/False, 'files':[ {'serialized file1'}, ... ] }, ... ]"
     status["watchdir"] = watchdir
     
     # misc.FileList, combination of 'outfile' and changes in watched directories
@@ -806,8 +804,18 @@ class JobDB(object):
         job["runendtime"] = job["runstarttime"] + job["walltime"]
         
         # set hash for input files and files in watchdirs
-        job["infile"].hash()
-        job["watchdir"].hash()
+        
+        infilelist = file.FileList.deserialize(job["infile"])
+        infilelist.startpoint()
+        job["infile"] = infilelist.serialize()
+        
+        infilelist = file.FileList.deserialize(job["outfile"])
+        infilelist.startpoint()
+        job["outfile"] = infilelist.serialize()
+        
+        watchdirlist = file.WatchDirList.deserialize(job["watchdir"])
+        watchdirlist.startpoint()
+        job["watchdir"] = watchdrilist.serialize()
         
         self.curs.execute("UPDATE jobs SET modifytime=?, runstarttime=?, runendtime=?, infile=?, watchdir=? WHERE jobid=?", \
                          ( int(time.time()), job["runstarttime"], job["runendtime"], job["infile"], job["watchdir"], job["jobid"]))
@@ -831,7 +839,7 @@ class JobDB(object):
     
     
     def end_job(self, jobid=None, job=None):
-        """Mark job ending runtime"""
+        """Mark job runendtime"""
         
         if job == None:
             job = self.select_job(jobid)
@@ -845,11 +853,15 @@ class JobDB(object):
         if now > job["runendtime"]:
             job["runendtime"] = now
         
-        job["outfile"].hash()
-        job["total_outfile"] = job["outfile"]
-        job["total_outfile"].append(job["watchdir"].diff())
+        # get data on files listed as outfiles
+        outfilelist = file.FileList.deserialize( job["outfile"])
+        outfilelist.startpoint()
         
-        self.curs.execute("UPDATE jobs SET modifytime=?, runtime=? WHERE jobid=?",( int(time.time()), job["runtime"], job["jobid"]))
+        # check watchdirs for added and changed files (not checking deletions at this point)
+        watchdirlist = file.WatchDirList.deserialize( job["watchdir"])
+        outfilelist.append( watchdirlist.diff()) 
+        
+        self.curs.execute("UPDATE jobs SET modifytime=?, runendtime=?, total_outfile=?, WHERE jobid=?",( int(time.time()), job["runendtime"], outfilelist.serialize(), job["jobid"]))
         self.conn.commit()
     
     
@@ -1060,17 +1072,14 @@ def error_job(message, jobid=None, dbpath=None):
     db.close()
 
 
-def start_job(jobid=None, dbpath=None, input=None, watchdir=None, watchdir_recurs=None):
+def start_job(jobid=None, dbpath=None):
     """ Set job start time, input files, and watch_dir's existing files. 
         
         Args:
             jobid:            jobid str of job to start. If not given, uses current job id from the
                                 environment variable 'PBS_JOBID'.
             dbpath:           Path to JobDB database. If not given, use default database (see JobDB().__init__)
-            input:            path to input files
-            watchdir:        path to directories where output will be written, if auto checking for changes in a directory
-            watchdir_recurs: path to directories where output will be written, if auto checking for changes
-                                in a directory and subdirectories
+            
     """
     if jobid == None:
         jobid = misc.job_id()
@@ -1078,24 +1087,18 @@ def start_job(jobid=None, dbpath=None, input=None, watchdir=None, watchdir_recur
             raise PBSError("Could not determine jobid") 
     db = JobDB(dbpath)
     
-    try:
-        job = db.select_job(jobid)
-    except JobDBError as e:
-        raise e
-    
-    db.start_job(job=job, input=input, watchdir=watchdir, watchdir_recurs=watchdir_recurs)
+    db.start_job(jobid=jobid)
     
     db.close()
 
 
-def end_job(jobid=None, dbpath=None, output=None):
+def end_job(jobid=None, dbpath=None):
     """ Set job end time, output files, and scan watch_dir's for new and modified files. 
         
         Args:
             jobid:            jobid str of job to start. If not given, uses current job id from the
                                 environment variable 'PBS_JOBID'.
             dbpath:           Path to JobDB database. If not given, use default database (see JobDB().__init__)
-            output:           path to output files
     """
     if jobid == None:
         jobid = misc.job_id()
@@ -1103,12 +1106,7 @@ def end_job(jobid=None, dbpath=None, output=None):
             raise PBSError("Could not determine jobid") 
     db = JobDB(dbpath)
     
-    try:
-        job = db.select_job(jobid)
-    except JobDBError as e:
-        raise e
-    
-    db.end_job(job=job, output=output)
+    db.end_job(jobid=jobid)
     
     db.close()
 
