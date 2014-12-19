@@ -1,9 +1,13 @@
 # pbs python-based PBS job submission and management
 
-VERS="develop"
+VERS=$$(git rev-parse --abbrev-ref HEAD)
 ID=$$(git rev-parse HEAD)
 URL=$$(git config --get remote.origin.url)
-
+ifeq "$(BIN)" ""
+	INSTALL = /usr/local/bin
+else
+	INSTALL = $(BIN)
+endif
 
 
 all: setup.py
@@ -14,9 +18,16 @@ ifeq "$(PYINSTALL)" ""
 else
 	python setup.py install --prefix=$(PYINSTALL)
 endif
+	install scripts/pstat $(INSTALL)
+	install scripts/psub $(INSTALL)
+	install scripts/taskmaster $(INSTALL)
 
 uninstall:
 	pip uninstall pbs
+	@echo "Finish uninstalling by removing the pbs package directory from the above path"
+	rm -f $(INSTALL)/pstat
+	rm -f $(INSTALL)/psub
+	rm -f $(INSTALL)/taskmaster
 
 clean:
 	rm -f setup.py pbs/__init__.py
