@@ -1,4 +1,4 @@
-import subprocess, re, os, StringIO
+import subprocess, re, os, sys, StringIO
 import jobdb, misc
 
 class Job(object):
@@ -214,7 +214,7 @@ class Job(object):
         optional["priority"] = "Default: 0"
         optional["auto"] = "Default: False"
         optional["exetime"] = "Default: None"
-        required["qos"] = "Default: None"
+        optional["qos"] = "Default: None"
         
         required = dict()
         required["name"] = "Not Found"
@@ -248,24 +248,24 @@ class Job(object):
                 
                 m = re.search("\s-l\s", line)
                 if m:
-                    m = re.search("walltime=(.*)\s", line)
+                    m = re.search("walltime=([0-9:]+)", line)
                     if m:
                         self.walltime = m.group(1)
                         required["walltime"] = self.walltime
                     
-                    m = re.search("nodes=(.*):ppn=(.*)\s",line)
+                    m = re.search("nodes=([0-9]+):ppn=([0-9]+)",line)
                     if m:
                         self.nodes = int(m.group(1))
                         self.ppn = int(m.group(2))
                         required["nodes"] = self.nodes
                         required["ppn"] = self.ppn
                     
-                    m = re.search("pmem=(.*)\s",line)
+                    m = re.search("pmem=([^,\s]+)",line)
                     if m:
                         self.pmem = m.group(1)
                         optional["pmem"] = self.pmem
                     
-                    m = re.search("qos=(.*)\s",line)
+                    m = re.search("qos=([^,\s]+)",line)
                     if m:
                         self.qos = m.group(1)
                         optional["qos"] = self.qos
@@ -324,7 +324,13 @@ class Job(object):
                     print k + ":", v
                 print "\nRequired arguments:"
                 for k,v in required.iteritems():
-                    print k + ":", v
+                    if k == "command":
+                        print k + ":"
+                        print "--- Begin command ---"
+                        print v
+                        print "--- End command ---"
+                    else:
+                        print k + ":", v
                 
                 sys.exit()
         # end if
