@@ -31,12 +31,13 @@ def PrismsJob( name = "STDIN", \
         sys.exit()
     
     j = job.Job( name = name, \
-             account = "prismsproject_flux", \
+             account = "prismsproject_fluxoe", \
              nodes = nodes, \
              ppn = ppn, \
              walltime = walltime, \
              pmem = pmem, \
-             queue = "flux", \
+             qos = "flux", \
+             queue = "fluxoe", \
              exetime = exetime, \
              message = message, \
              email = email, \
@@ -76,12 +77,13 @@ def NonPrismsJob( name = "STDIN", \
         sys.exit()
     
     j = job.Job( name = name, \
-             account = "prismsproject_flux", \
+             account = "prismsproject_fluxoe", \
              nodes = nodes, \
              ppn = ppn, \
              walltime = walltime, \
              pmem = pmem, \
-             queue = "flux", \
+             qos = "flux", \
+             queue = "fluxoe", \
              exetime = exetime, \
              message = message, \
              email = email, \
@@ -121,12 +123,13 @@ def PrismsPriorityJob( name = "STDIN", \
         sys.exit()
     
     j = job.Job( name = name, \
-             account = "prismsproject_flux", \
+             account = "prismsproject_fluxoe", \
              nodes = nodes, \
              ppn = ppn, \
              walltime = walltime, \
              pmem = pmem, \
-             queue = "flux", \
+             qos = "flux", \
+             queue = "fluxoe", \
              exetime = exetime, \
              message = message, \
              email = email, \
@@ -165,12 +168,13 @@ def PrismsDebugJob( name = "STDIN", \
         sys.exit()
     
     j = job.Job( name = name, \
-             account = "prismsprojectdebug_flux", \
+             account = "prismsprojectdebug_fluxoe", \
              nodes = nodes, \
              ppn = ppn, \
              walltime = walltime, \
              pmem = pmem, \
-             queue = "flux", \
+             qos = "flux", \
+             queue = "fluxoe", \
              exetime = exetime, \
              message = message, \
              email = email, \
@@ -205,12 +209,13 @@ def PrismsSpecialJob( name = "STDIN", \
         sys.exit()
     
     j = job.Job( name = name, \
-             account = "prismsproject_flux", \
+             account = "prismsproject_fluxoe", \
              nodes = nodes, \
              ppn = ppn, \
              walltime = walltime, \
              pmem = pmem, \
-             queue = "flux", \
+             qos = "flux", \
+             queue = "fluxoe", \
              exetime = exetime, \
              message = message, \
              email = email, \

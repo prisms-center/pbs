@@ -10,12 +10,13 @@ class Job(object):
     
     Contains variables (with example values):
         name        "jobname"
-        account     "prismsproject_flux"
+        account     "prismsproject_fluxoe"
         nodes       2
         ppn         16
         walltime    "10:00:00"
         pmem        "3800mb"
-        queue       "flux"
+        qos         "flux"
+        queue       "fluxoe"
         message     "abe"
         email       "jdoe@umich.edu"
         priority    "-200"
@@ -34,6 +35,7 @@ class Job(object):
                        ppn = None, \
                        walltime = None, \
                        pmem = None, \
+                       qos = None, \
                        queue = None, \
                        exetime = None, \
                        message = "a", \
@@ -67,6 +69,9 @@ class Job(object):
         
         # string memory requested (1000mb)
         self.pmem = pmem
+        
+        # qos string
+        self.qos = qos
         
         # queue string
         self.queue = queue
@@ -129,7 +134,8 @@ class Job(object):
         s += "#PBS -l nodes={0}:ppn={1}\n".format(self.nodes, self.ppn)
         if self.pmem is not None:
             s += "#PBS -l pmem={0}\n".format(self.pmem)
-        s += "#PBS -l qos={0}\n".format(self.queue)
+        if self.qos is not None:
+            s += "#PBS -l qos={0}\n".format(self.qos)
         s += "#PBS -q {0}\n".format(self.queue)
         if self.email != None and self.message != None:
             s += "#PBS -M {0}\n".format(self.email)
@@ -184,7 +190,7 @@ class Job(object):
         
            Will read many but not all valid PBS scripts.
            Will ignore any arguments not included in pbs.Job()'s attributes.
-           Will add default optional arguments (-A, -a, -l pmem=(.*), -M, -m, -p, "Auto:") if not found
+           Will add default optional arguments (-A, -a, -l pmem=(.*), -l qos=(.*), -M, -m, -p, "Auto:") if not found
            Will exit() if required arguments (-N, -l walltime=(.*), -l nodes=(.*):ppn=(.*), -q, cd $PBS_O_WORKDIR) not found
            Will always include -V
            
@@ -198,6 +204,7 @@ class Job(object):
         self.auto = False
         self.account = None
         self.exetime = None
+        self.qos = None
         
         optional = dict()
         optional["account"] = "Default: None"
@@ -207,6 +214,7 @@ class Job(object):
         optional["priority"] = "Default: 0"
         optional["auto"] = "Default: False"
         optional["exetime"] = "Default: None"
+        required["qos"] = "Default: None"
         
         required = dict()
         required["name"] = "Not Found"
@@ -256,6 +264,11 @@ class Job(object):
                     if m:
                         self.pmem = m.group(1)
                         optional["pmem"] = self.pmem
+                    
+                    m = re.search("qos=(.*)\s",line)
+                    if m:
+                        self.qos = m.group(1)
+                        optional["qos"] = self.qos
                 #
                 
                 m = re.search("-q\s+(.*)\s", line)
