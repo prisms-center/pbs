@@ -1,10 +1,10 @@
-import subprocess, os, StringIO, re, datetime, time
+import subprocess, os, StringIO, re, datetime, time, sys
 
 class PBSError(Exception):
     def __init__(self, jobid, msg):
         self.jobid = jobid
         self.msg = msg
-    
+
     def __str__(self):
         return self.jobid + ": " + self.msg
 
@@ -17,6 +17,19 @@ def getlogin():
         return os.environ["LOGNAME"]
     else:
         return "?"
+
+def getversion():
+    """Returns the qstat version """
+    opt = ["qstat", "--version"]
+
+    # call 'qstat' using subprocess
+    p = subprocess.Popen(opt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout,stderr = p.communicate()
+    sout = StringIO.StringIO(stdout)
+
+    # return the version number
+    return sout.read().rstrip("\n").lstrip("version: ")
+
 
 
 def seconds( walltime):
@@ -54,26 +67,26 @@ def hours( walltime):
 def strftimedelta( seconds):
     """Convert seconds to D+:HH:MM:SS"""
     seconds = int(seconds)
-    
+
     day_in_seconds = 24.0*3600.0
     hour_in_seconds = 3600.0
     minute_in_seconds = 60.0
-    
+
     day = int(seconds/day_in_seconds)
     seconds -= day*day_in_seconds
-    
+
     hour = int(seconds/hour_in_seconds)
     seconds -= hour*hour_in_seconds
-    
+
     minute = int(seconds/minute_in_seconds)
     seconds -= minute*minute_in_seconds
-    
+
     return str(day) + ":" + ("%02d" % hour) + ":" + ("%02d" % minute) + ":" + ("%02d" % seconds)
 
 
 def exetime( deltatime):
     """Get the exetime string for the PBS '-a'option from a [[[DD:]MM:]HH:]SS string
-    
+
        exetime string format: YYYYmmddHHMM.SS
     """
     return (datetime.datetime.now()+datetime.timedelta(hours=hours(deltatime))).strftime("%Y%m%d%H%M.%S")
@@ -81,18 +94,39 @@ def exetime( deltatime):
 
 def qstat(jobid=None, username=getlogin(), full=False):
     """Return the stdout of qstat minus the header lines.
-       
+
        By default, 'username' is set to the current user.
        'full' is the '-f' option
        'id' is a string or list of strings of job ids
-       
+
        Returns the text of qstat, minus the header lines
     """
-    
-    # set options
+
+    # -u and -f contradict in earlier versions of Torque
+    if full == True and username != None and (int(getversion().split(".")[0]) < 5.0 and jobid == None):
+        # First get all jobs by the user
+        qopt = ["qselect"]
+        qopt += ["-u", username]
+
+        # Call 'qselect' using subprocess
+        q = subprocess.Popen(qopt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        stdout, stderr = q.communicate()
+
+        qsout = StringIO.StringIO(stdout)
+
+        # Get the jobids
+        jobid = []
+        for line in qsout:
+            jobid += [line.rstrip("\n")]
+
     opt = ["qstat"]
-    if username != None:
+    # If there are jobid(s), you don't need a username
+    if username != None and jobid == None:
         opt += ["-u", username]
+    # But if there are jobid(s) and a username, you need -a to get full output
+    elif username != None and jobid != None and full==False:
+        opt += ["-a"]
+    # By this point we're guaranteed torque ver >= 5.0, so -u and -f are safe together
     if full == True:
         opt += ["-f"]
     if jobid != None:
@@ -104,30 +138,31 @@ def qstat(jobid=None, username=getlogin(), full=False):
             print "Error in pbs.misc.qstat(). type(jobid):", type(jobid)
             sys.exit()
         opt += jobid
-    
+
     # call 'qstat' using subprocess
+    print opt
     p = subprocess.Popen(opt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout,stderr = p.communicate()
-    
+
     sout = StringIO.StringIO(stdout)
-    
+
     # strip the header lines
     if full == False:
         for line in sout:
             if line[0] == "-":
                 break
-    
+
     # return the remaining text
     return sout.read()
 
 
 def job_id(all=False,name=None):
     """If 'name' given, returns a list of all jobs with a particular name using qstat.
-       Else, if all=True, returns a list of all job ids by current user. 
+       Else, if all=True, returns a list of all job ids by current user.
        Else, returns this job id from environment variable PBS_JOBID (split to get just the number).
-       
+
        Else, returns None
-       
+
     """
     if all or name != None:
         jobid = []
@@ -141,7 +176,7 @@ def job_id(all=False,name=None):
                 jobid.append( (line.split()[0]).split(".")[0] )
         return jobid
     else:
-        if 'PBS_JOBID' in os.environ: 
+        if 'PBS_JOBID' in os.environ:
             return os.environ['PBS_JOBID'].split(".")[0]
         else:
             return None
@@ -150,11 +185,11 @@ def job_id(all=False,name=None):
 
 def job_rundir( jobid):
     """Return the directory job "id" was run in using qstat.
-       
+
        Returns a dict, with id as key and rundir and value.
     """
     rundir = dict()
-    
+
     if isinstance(id, (list)):
         for i in jobid:
             stdout = qstat(jobid=i, full=True)
@@ -166,30 +201,30 @@ def job_rundir( jobid):
         rundir[i] = match.group(1)
     return rundir
 
-    
+
 def job_status( jobid=None):
     """Return job status using qstat
-    
-       Returns a dict of dict, with jobid as key in outer dict. 
+
+       Returns a dict of dict, with jobid as key in outer dict.
        Inner dict contains:
-       "name", "nodes", "procs", "walltime", 
+       "name", "nodes", "procs", "walltime",
        "jobstatus": status ("Q","C","R", etc.)
        "qstatstr": result of qstat -f jobid, None if not found
        "elapsedtime": None if not started, else seconds as int
        "starttime": None if not started, else seconds since epoch as int
        "completiontime": None if not completed, else seconds since epoch as int
-       
+
        *This should be edited to return job_status_dict()'s*
     """
     status = dict()
-    
+
     stdout = qstat(jobid=jobid, full=True)
     sout = StringIO.StringIO(stdout)
-    
+
     jobstatus = None
-    
+
     for line in sout:
-        
+
         m = re.search("Job Id:\s*(.*)\s",line)
         if m:
             if jobstatus != None:
@@ -203,20 +238,20 @@ def job_status( jobid=None):
             jobstatus["starttime"] = None
             jobstatus["completiontime"] = None
             continue
-        
+
         jobstatus["qstatstr"] += line
-        
+
         #results = line.split()
         #jobid = results[0].split(".")[0]
         #jobstatus = dict()
         #jobstatus["jobid"] = jobid
-        
+
         #jobstatus["jobname"] = results[3]
         m = re.match("\s*Job_Name\s*=\s*(.*)\s",line)
         if m:
             jobstatus["jobname"] = m.group(1)
             continue
-        
+
         #jobstatus["nodes"] = int(results[5])
         #jobstatus["procs"] = int(results[6])
         m = re.match("\s*Resource_List\.nodes\s*=\s*(.*):ppn=(.*)\s",line)
@@ -224,19 +259,19 @@ def job_status( jobid=None):
             jobstatus["nodes"] = m.group(1)
             jobstatus["procs"] = int(m.group(1))*int(m.group(2))
             continue
-        
+
         #jobstatus["walltime"] = int(seconds(results[8]))
         m = re.match("\s*Resource_List\.walltime\s*=\s*(.*)\s",line)
         if m:
             jobstatus["walltime"] = int(seconds(m.group(1)))
             continue
-        
+
         #jobstatus["jobstatus"] = results[9]
         m = re.match("\s*job_state\s*=\s*(.*)\s",line)
         if m:
             jobstatus["jobstatus"] = m.group(1)
             continue
-        
+
         #elapsedtime = line.split()[10]
         #if elapsedtime == "--":
         #    jobstatus["elapsedtime"] = None
@@ -249,42 +284,42 @@ def job_status( jobid=None):
         #    m = re.search("Job_Name = (.*)\n",qstatstr)
         #    if m:
         #        jobstatus["jobname"] = m.group(1)
-        
+
         #m = re.match("\s*resources_used.walltime\s*=\s*(.*)\s",line)
         #if m:
         #    print line
         #    jobstatus["elapsedtime"] = int(seconds(m.group(1)))
-            
+
         m = re.match("\s*start_time\s*=\s*(.*)\s",line)
         if m:
             jobstatus["starttime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
             continue
-            
+
         m = re.search("\s*comp_time\s*=\s*(.*)\s",line)
         if m:
             jobstatus["completiontime"] = int( time.mktime(datetime.datetime.strptime(m.group(1),"%a %b %d %H:%M:%S %Y").timetuple()) )
             continue
-        
+
     if jobstatus != None:
         if jobstatus["jobstatus"] == "R":
             jobstatus["elapsedtime"] = int(time.time()) - jobstatus["starttime"]
         status[jobstatus["jobid"]] = jobstatus
-    
+
     return status
 
 
 def submit(qsubstr):
     """Submit a PBS job using qsub.
-       
+
        qsubstr: The submit script string
     """
-    
+
     m = re.search("-N\s+(.*)\s",qsubstr)
     if m:
         jobname = m.group(1)
     else:
         raise PBSError("Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string.")
-    
+
     p = subprocess.Popen("qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout,stderr = p.communicate(input=qsubstr)
     print stdout[:-1]
@@ -318,7 +353,7 @@ def release(jobid):
 
 def alter(jobid, arg):
     """qalter a PBS job.
-    
+
         'arg' is a pbs command option string. For instance, "-a 201403152300.19"
     """
     p = subprocess.Popen(["qalter"] + arg.split() + [jobid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
