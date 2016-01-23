@@ -279,13 +279,13 @@ def submit(qsubstr):
        qsubstr: The submit script string
     """
     
-    m = re.search("-N\s+(.*)\s",qsubstr)
+    m = re.search("-J\s+(.*)\s",qsubstr)
     if m:
         jobname = m.group(1)
     else:
         raise PBSError("Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string.")
     
-    p = subprocess.Popen("qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    p = subprocess.Popen("sbatch", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout,stderr = p.communicate(input=qsubstr)
     print stdout[:-1]
     if re.search("error", stdout):

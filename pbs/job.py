@@ -124,28 +124,28 @@ class Job(object):
         """Write this Job as a string"""
         
         s = "#!/bin/sh\n"
-        s += "#PBS -S /bin/sh\n"
-        s += "#PBS -N {0}\n".format(self.name)
-        if self.exetime is not None:
-            s += "#PBS -a {0}\n".format(self.exetime)
+        #s += "#PBS -S /bin/sh\n"
+        s += "#SBATCH -J {0}\n".format(self.name)
+        #if self.exetime is not None:
+        #    s += "#PBS -a {0}\n".format(self.exetime)
         if self.account is not None:
-            s += "#PBS -A {0}\n".format(self.account)
-        s += "#PBS -l walltime={0}\n".format(self.walltime)
-        s += "#PBS -l nodes={0}:ppn={1}\n".format(self.nodes, self.ppn)
-        if self.pmem is not None:
-            s += "#PBS -l pmem={0}\n".format(self.pmem)
-        if self.qos is not None:
-            s += "#PBS -l qos={0}\n".format(self.qos)
-        s += "#PBS -q {0}\n".format(self.queue)
-        if self.email != None and self.message != None:
-            s += "#PBS -M {0}\n".format(self.email)
-            s += "#PBS -m {0}\n".format(self.message)
-        s += "#PBS -V\n"
-        s += "#PBS -p {0}\n\n".format(self.priority)
-        s += "#auto={0}\n\n".format(self.auto)
-        s += "echo \"I ran on:\"\n"
-        s += "cat $PBS_NODEFILE\n\n"
-        s += "cd $PBS_O_WORKDIR\n"
+            s += "#SBATCH -A {0}\n".format(self.account)
+        s += "#SBATCH -t {0}\n".format(self.walltime)
+        s += "#SBATCH -N {0}\n".format(self.nodes)
+        #if self.pmem is not None:
+        #    s += "#PBS -l pmem={0}\n".format(self.pmem)
+        #if self.qos is not None:
+        #    s += "#PBS -l qos={0}\n".format(self.qos)
+        s += "#SBATCH -p {0}\n".format(self.queue)
+        #if self.email != None and self.message != None:
+        #    s += "#PBS -M {0}\n".format(self.email)
+        #    s += "#PBS -m {0}\n".format(self.message)
+        #s += "#PBS -V\n"
+        #s += "#PBS -p {0}\n\n".format(self.priority)
+        #s += "#auto={0}\n\n".format(self.auto)
+        #s += "echo \"I ran on:\"\n"
+        #s += "cat $PBS_NODEFILE\n\n"
+        #s += "cd $PBS_O_WORKDIR\n"
         s += "{0}\n".format(self.command)
         
         return s
