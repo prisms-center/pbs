@@ -287,11 +287,11 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
         if not os.path.isfile(configpath):
             print "Writing Config:", configpath
             self.config = {"software" : misc.getsoftware(), "version" : misc.getversion()}
-            with open(configpath) as my_json:
-                json.dump(self.config, configpath, indent=0)
+            with open(configpath, "w") as my_json:
+                json.dump(self.config, my_json, indent=0)
         else:
             with open(configpath) as my_json:
-                self.config = my_json.load(my_json)
+                self.config = json.load(my_json)
 
         if not os.path.isfile(dbpath):
             print "Creating Database:", dbpath
