@@ -10,9 +10,6 @@ import StringIO
 import jobdb
 import misc
 
-### Fixing pylint not recognizing conditional import inside class ###
-misc_pbs = misc_pbs #pylint: disable=invalid-name, undefined-variable
-
 class Job(object):  #pylint: disable=too-many-instance-attributes
     """A qsub Job object.
 

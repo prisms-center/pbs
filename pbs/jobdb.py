@@ -13,8 +13,6 @@ import json
 
 import misc
 
-misc_pbs = misc_pbs #pylint: disable=invalid-name, undefined-variable
-
 class JobDBError(Exception):
     """ Custom error class for JobDBs"""
     def __init__(self, msg):
