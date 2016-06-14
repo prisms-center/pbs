@@ -1,12 +1,20 @@
 """ Misc functions for interacting between the OS and the pbs module """
 
-import subprocess, os, StringIO, re, datetime, time, sys
+import subprocess
+import os
+import StringIO
+# import re
+import datetime
+# import time
+import sys
 from distutils.spawn import find_executable
 
 class PBSError(Exception):
+    """ A custom error class for pbs errors """
     def __init__(self, jobid, msg):
         self.jobid = jobid
         self.msg = msg
+        super(PBSError, self).__init__()
 
     def __str__(self):
         return self.jobid + ": " + self.msg
@@ -36,44 +44,50 @@ def getversion():
     opt = ["qstat", "--version"]
 
     # call 'qstat' using subprocess
-    p = subprocess.Popen(opt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    stdout,stderr = p.communicate()
+    p = subprocess.Popen(opt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) #pylint: disable=invalid-name
+    stdout, stderr = p.communicate()    #pylint: disable=unused-variable
     sout = StringIO.StringIO(stdout)
 
     # return the version number
     return sout.read().rstrip("\n").lstrip("version: ")
 
-def seconds( walltime):
+def seconds(walltime):
     """Convert [[[DD:]HH:]MM:]SS to hours"""
     wtime = walltime.split(":")
-    if( len(wtime)==1):
+    if len(wtime) == 1:
         return float(wtime[0])
-    elif( len(wtime)==2):
+    elif len(wtime) == 2:
         return float(wtime[0])*60.0 + float(wtime[1])
-    elif( len(wtime)==3):
+    elif len(wtime) == 3:
         return float(wtime[0])*3600.0 + float(wtime[1])*60.0 + float(wtime[2])
-    elif( len(wtime)==4):
-        return float(wtime[0])*24.0*3600.0 + float(wtime[0])*3600.0 + float(wtime[1])*60.0 + float(wtime[2])
+    elif len(wtime) == 4:
+        return (float(wtime[0])*24.0*3600.0
+                + float(wtime[0])*3600.0
+                + float(wtime[1])*60.0
+                + float(wtime[2]))
     else:
         print "Error in walltime format:", walltime
         sys.exit()
 
-def hours( walltime):
+def hours(walltime):
     """Convert [[[DD:]HH:]MM:]SS to hours"""
     wtime = walltime.split(":")
-    if( len(wtime)==1):
+    if len(wtime) == 1:
         return float(wtime[0])/3600.0
-    elif( len(wtime)==2):
+    elif len(wtime) == 2:
         return float(wtime[0])/60.0 + float(wtime[1])/3600.0
-    elif( len(wtime)==3):
+    elif len(wtime) == 3:
         return float(wtime[0]) + float(wtime[1])/60.0 + float(wtime[2])/3600.0
-    elif( len(wtime)==4):
-        return float(wtime[0])*24.0 + float(wtime[0]) + float(wtime[1])/60.0 + float(wtime[2])/3600.0
+    elif len(wtime) == 4:
+        return (float(wtime[0])*24.0
+                + float(wtime[0])
+                + float(wtime[1])/60.0
+                + float(wtime[2])/3600.0)
     else:
         print "Error in walltime format:", walltime
         sys.exit()
 
-def strftimedelta( seconds):
+def strftimedelta(seconds):     #pylint: disable=redefined-outer-name
     """Convert seconds to D+:HH:MM:SS"""
     seconds = int(seconds)
 
@@ -92,9 +106,10 @@ def strftimedelta( seconds):
 
     return str(day) + ":" + ("%02d" % hour) + ":" + ("%02d" % minute) + ":" + ("%02d" % seconds)
 
-def exetime( deltatime):
+def exetime(deltatime):
     """Get the exetime string for the PBS '-a'option from a [[[DD:]MM:]HH:]SS string
 
        exetime string format: YYYYmmddHHMM.SS
     """
-    return (datetime.datetime.now()+datetime.timedelta(hours=hours(deltatime))).strftime("%Y%m%d%H%M.%S")
+    return (datetime.datetime.now()
+            +datetime.timedelta(hours=hours(deltatime))).strftime("%Y%m%d%H%M.%S")
