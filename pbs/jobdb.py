@@ -1,10 +1,10 @@
-import sqlite3, os, sys, socket, time, re, subprocess, datetime
+import sqlite3, os, sys, socket, time, re, subprocess, datetime, json
 import misc
 
 class JobDBError(Exception):
     def __init__(self, msg):
         self.msg = msg
-    
+
     def __str__(self):
         return self.msg
 
@@ -13,13 +13,13 @@ class EligibilityError(Exception):
     def __init__(self, jobid, msg):
         self.jobid = jobid
         self.msg = msg
-    
+
     def __str__(self):
         return self.jobid + ": " + self.msg
 
 
 # columns in database (see job_status_dict()):
-# username, hostname, jobid, jobname, rundir, jobstatus, auto, taskstatus, continuation_jobid, qsubstr, 
+# username, hostname, jobid, jobname, rundir, jobstatus, auto, taskstatus, continuation_jobid, qsubstr,
 # qstatstr, nodes, proc, walltime, starttime, completiontime, elapsedtime
 
 # allowed values (not checked at this time):
@@ -45,13 +45,13 @@ def job_status_dict(   username = misc.getlogin(), \
                        starttime = None, \
                        completiontime = None):
     """Return a dict() with job_status fields.
-    
+
        This is used to add records to the JobDB database through JobDB().add().
     """
-    
+
     creationtime = int(time.time())
     modifytime = creationtime
-    
+
     status = dict()
     status["username"] = username
     status["hostname"] = hostname
@@ -64,21 +64,21 @@ def job_status_dict(   username = misc.getlogin(), \
     status["continuation_jobid"] = continuation_jobid
     status["qsubstr"] = qsubstr
     status["qstatstr"] = qstatstr
-    
+
     # integer:
     status["nodes"] = nodes
     status["procs"] = procs
-    
+
     # integer s:
     status["walltime"] = walltime
     status["elapsedtime"] = elapsedtime
-        
+
     # integer s since the epoch:
     status["creationtime"] = creationtime
     status["starttime"] = starttime
     status["completiontime"] = completiontime
     status["modifytime"] = modifytime
-    
+
     return status
 
 
@@ -98,25 +98,25 @@ def job_status_dict(   username = misc.getlogin(), \
 
 
 def job_status_type_dict():
-    """This specifies the SQL type for each field. 
+    """This specifies the SQL type for each field.
        It is used to create the JobDB SQL table.
-    """ 
+    """
     status = job_status_dict()
     for k in status.keys():
         status[k] = "text"
     status["auto"] = "integer"
-    
+
     status["nodes"] = "integer"
     status["procs"] = "integer"
-    
+
     status["walltime"] = "integer"
     status["elapsedtime"] = "integer"
-    
+
     status["creationtime"] = "integer"
     status["starttime"] = "integer"
     status["completiontime"] = "integer"
     status["modifytime"] = "integer"
-    
+
     return status
 
 
@@ -141,7 +141,7 @@ def sql_insert_str(job_status):
         val.append(job_status[k])
     colstr = colstr[:-2] + ")"
     questionstr = questionstr[:-2] + ")"
-    return colstr, questionstr, tuple(val)   
+    return colstr, questionstr, tuple(val)
 
 
 def sql_iter(curs, arraysize=1000):
@@ -161,44 +161,55 @@ def regexp( pattern, string):
 class JobDB(object):
     """A PBS Job Database object"""
 
-    def __init__(self, dbpath = None):
+    def __init__(self, dbpath=None, configpath=None):
         """Construct a PBS Job Database object.
-        
+
            Usually this is called without arguments (pbs.JobDB()) to open or create a database in the default location.
-           
+
            If dbpath is not given, the default location is determined as follows:
              If the PBS_JOB_DB environment variable exists, set dbpath to "$PBS_JOB_DB/jobs.db" file.
              Else, set dbpath to "$HOME/.pbs/jobs.db", where $HOME is the user's home directory
            Else:
              dbpath: path to a JobDB database file.
-           
-           
+
+           If configpath is not given, the default location is determined as follows:
+             If the PBS_JOB_DB environment variable exists, set configpath to "$PBS_JOB_DB/config.json" file.
+             Else, set configpath to "$HOME/.pbs/config.json", where $HOME is the user's home directory
+           Else:
+             configpath: path to a pbs config file.
+
+
         """
-        
+
         self.conn = None
         self.curs = None
-        
+
         self.username = misc.getlogin()
         self.hostname = socket.gethostname()
-        self.connect(dbpath)
-        
+        self.connect(dbpath, configpath)
+
         # list of dict() from misc.job_status for jobs not tracked in database:
         # refreshed upon update()
         self.untracked = []
-    
-    
-    def connect(self, dbpath=None):
+
+
+    def connect(self, dbpath=None, configpath):
         """Open a connection to the jobs database.
-        
+
            dbpath: path to a JobDB database file.
-           
+           configpath: path to a pbs config file.
+
            If dbpath is not given:
            If PBS_JOB_DB environment variable exists, set dbpath to "$PBS_JOB_DB/jobs.db" file.
            Else, set dbpath to "$HOME/.pbs/jobs.db", where $HOME is the user's home directory
-           
+
+           If configpath is not given:
+           If PBS_JOB_DB environment variable exists, set configpath to "$PBS_JOB_DB/config.json" file.
+           Else, set configpath to "$HOME/.pbs/config.json", where $HOME is the user's home directory
+
         """
-        
-        if dbpath == None: 
+
+        if dbpath == None:
             if "PBS_JOB_DB" in os.environ:
                 dbpath = os.environ("PBS_JOB_DB")
                 if not os.path.isdir(dbpath):
@@ -216,7 +227,40 @@ class JobDB(object):
             if not os.path.isfile(dbpath):
                 print "Error in pbs.jobdb.JobDB.connect(). argument dbpath =", dbpath, "is not a file."
                 sys.exit()
-        
+
+
+        if configpath == None:
+            if "PBS_JOB_DB" in os.environ:
+                configpath = os.environ("PBS_JOB_DB")
+                if not os.path.isdir(configpath):
+                    print "Error in pbs.jobdb.JobDB.connect()."
+                    print "  PBS_JOB_DB:", configpath
+                    print "  Does not exist"
+                    sys.exit()
+            else:
+                configpath = os.path.join( os.environ["HOME"], ".pbs")
+                if not os.path.isdir(configpath):
+                    print "Creating directory:", configpath
+                    os.mkdir(configpath)
+            configpath = os.path.join(configpath,"config.json")
+        else:
+            if not os.path.isfile(configpath):
+                print "Error in pbs.jobdb.JobDB.connect(). argument configpath =", configpath, "is not a file."
+                sys.exit()
+
+
+        if not os.path.isfile(configpath):
+            print "Writing Config:", configpath
+            self.config = {"software" : misc.getsoftware(), "version" : misc.getversion()}
+            with open(configpath) as my_json:
+                json.dump(self.config, configpath, indent=0)
+        else:
+            with open(configpath) as my_json:
+                self.config = my_json.load(my_json)
+
+        self.software = config["software"]
+        self.version = config["version"]
+
         if not os.path.isfile(dbpath):
             print "Creating Database:", dbpath
             self.conn = sqlite3.connect(dbpath)
@@ -230,51 +274,51 @@ class JobDB(object):
             self.conn.row_factory = sqlite3.Row
             self.conn.create_function("REGEXP",2,regexp)
             self.curs = self.conn.cursor()
-        
-    
+
+
     def close(self):
         """Close the connection to the jobs database."""
-        
+
         self.conn.close()
-    
-    
+
+
     def add(self, job_status ):
         """Add a record to the jobs database.
-        
+
            Accepts 'job_status', a dictionary of data comprising the record. Create
            'job_status' using pbs.jobdb.job_status_dict().
-        
+
         """
         (colstr, questionstr, valtuple) = sql_insert_str(job_status)
         insertstr = "INSERT INTO jobs {0} VALUES {1}".format( colstr, questionstr)
         self.curs.execute( insertstr , valtuple)
         self.conn.commit()
-    
-    
+
+
     def update(self):
         """Update records using qstat.
-        
+
            Any jobs found using qstat that are not in the jobs database are saved in 'self.untracked'.
         """
-        
+
         # update jobstatus
 
         # select jobs that are not yet marked complete
         self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C'")
-        
+
         # newstatus will contain the updated info
         newstatus = dict()
-        
+
         # any jobs that we don't find with qstat should be marked as 'C'
         for f in sql_iter(self.curs):
             newstatus[f["jobid"]] = "C"
-        
+
         # get job_status dict for all jobs found with qstat
         active_status = misc.job_status()
-        
+
         # reset untracked
         self.untracked = []
-        
+
         # collect job status
         for k in active_status.keys():
             if k in newstatus:
@@ -283,7 +327,7 @@ class JobDB(object):
                 self.curs.execute("SELECT jobid FROM jobs WHERE jobid=?",(k,))
                 if self.curs.fetchone() is None:
                     self.untracked.append(active_status[k])
-        
+
         # update database with latest job status
         for key, jobstatus in newstatus.iteritems():
             if jobstatus == "C":
@@ -296,20 +340,20 @@ class JobDB(object):
                 self.curs.execute("UPDATE jobs SET jobstatus=?, elapsedtime=?, starttime=?, completiontime=?, qstatstr=?, modifytime=? WHERE jobid=?", \
                   (jobstatus["jobstatus"], jobstatus["elapsedtime"], jobstatus["starttime"], jobstatus["completiontime"], jobstatus["qstatstr"], int(time.time()), key))
         self.conn.commit()
-        
+
         # update taskstatus for non-auto jobs
         self.curs.execute("UPDATE jobs SET taskstatus='Check', modifytime=? WHERE jobstatus='C' AND taskstatus='Incomplete' AND auto=0", (int(time.time()),))
         self.conn.commit()
-        
-    
-    
-    
+
+
+
+
     def select_job(self, jobid):
         """Return record (sqlite3.Row object) for one job with given jobid."""
         if not isinstance(jobid,str) and not isinstance(jobid,unicode):
             print "Error in pbs.JobDB.select_job(). type(id):", type(jobid), "expected str."
             sys.exit()
-        
+
         self.curs.execute("SELECT * FROM jobs WHERE jobid=?", (jobid,))
         r = self.curs.fetchall()
         if len(r) == 0:
@@ -317,8 +361,8 @@ class JobDB(object):
         elif len(r) > 1:
             raise JobDBError("Error in pbs.JobDB.select_job(). " + str(len(r)) + " records with jobid: '" + jobid + "' found.")
         return r[0]
-    
-    
+
+
     def select_series(self, jobid):
         """Return records (sqlite3.Row objects) for a series of auto jobs"""
         r = self.select_job(jobid)
@@ -332,17 +376,17 @@ class JobDB(object):
             series.append(child)
             child = self.select_child(child["jobid"])
         return series
-    
-    
+
+
     def select_parent(self, jobid):
         """Return record for the parent of a job
-            
+
            The parent is the job with continuation_jobid = given jobid
         """
         if not isinstance(jobid,str) and not isinstance(jobid,unicode):
             print "Error in pbs.JobDB.select_parent(). type(id):", type(jobid), "expected str."
             sys.exit()
-        
+
         self.curs.execute("SELECT * FROM jobs WHERE continuation_jobid=?",(jobid,))
         r = self.curs.fetchall()
         if len(r) == 0:
@@ -351,18 +395,18 @@ class JobDB(object):
             print "Error in pbs.JobDB.select_parent().", len(r), " records with continuation_jobid:", jobid, " found."
             sys.exit()
         return r[0]
-    
-    
+
+
     def select_child(self, jobid):
         """Return record for the child of a job
-        
+
            The child is the job whose jobid = continuation_jobid of job with given jobid
         """
         r = self.select_job(jobid)
-        
+
         if r["continuation_jobid"] == "-":
             return None
-        
+
         self.curs.execute("SELECT * FROM jobs WHERE jobid=?",(r["continuation_jobid"],))
         r = self.curs.fetchall()
         if len(r) == 0:
@@ -372,9 +416,9 @@ class JobDB(object):
             print "Error in pbs.JobDB.select_child().", len(r), " records with child jobid:", r["continuation_jobid"], " found."
             sys.exit()
         return r[0]
-    
-    
-    
+
+
+
     def select_all_id(self):
         """Return a list with all jobids."""
         job = []
@@ -382,11 +426,11 @@ class JobDB(object):
         for r in sql_iter(self.curs):
             job.append(r["jobid"])
         return job
-    
-    
+
+
     def select_all_active_id(self):
         """Return a list with all active jobids.
-        
+
            "Active" jobs are those with taskstatus='Incomplete' or 'Check'
         """
         active_job = []
@@ -394,8 +438,8 @@ class JobDB(object):
         for r in sql_iter(self.curs):
             active_job.append( r["jobid"] )
         return active_job
-    
-    
+
+
     def select_range_id(self, min_jobid, max_jobid):
         """ Return a list of all jobids which are between (and including) min_jobid and max_jobid. """
         job = []
@@ -404,8 +448,8 @@ class JobDB(object):
             if int(r["jobid"]) >= int(min_jobid) and int(r["jobid"]) <= int(max_jobid):
                 job.append(r["jobid"])
         return job
-    
-    
+
+
     def select_recent_id(self, recent_time):
         """ Return a list of all jobids which were modified in the last 'recent_time' """
         mintime = int(time.time() - misc.seconds(recent_time))
@@ -425,10 +469,10 @@ class JobDB(object):
                 job.append( r["jobid"] )
         else:
             raise JobDBError(key + " not a valid key")
-        
+
         return job
-    
-    
+
+
     def select_series_id(self, jobid):
         """Return a list with all jobids for a series of auto jobs."""
         job = [jobid]
@@ -442,8 +486,8 @@ class JobDB(object):
             job.append(child["jobid"])
             child = self.select_child(child["jobid"])
         return job
-    
-    
+
+
     def select_all_series_id(self):
         """Return a list of lists of jobids (one list for each series)."""
         all_series = []
@@ -452,11 +496,11 @@ class JobDB(object):
             if r["continuation_jobid"] == "-":
                 all_series.append( select_series_id(r["jobid"]) )
         return all_series
-    
-    
+
+
     def select_active_series_id(self):
         """Return a list of lists of jobids (one list for each active series).
-           
+
            "Active" series of auto jobs are those with one job with taskstatus='Incomplete' or 'Check'
         """
         active_series = []
@@ -465,11 +509,11 @@ class JobDB(object):
             if r["continuation_jobid"] == "-":
                 active_series.append( select_series_id(r["jobid"]) )
         return active_series
-    
-    
+
+
     def select_range_series_id(self, min_jobid, max_jobid):
-        """ Return a list of lists of all jobids for series (one list for each series) 
-            which have the last job between (and including) min_jobid and max_jobid. 
+        """ Return a list of lists of all jobids for series (one list for each series)
+            which have the last job between (and including) min_jobid and max_jobid.
         """
         job = []
         self.curs.execute("SELECT jobid, continuation_jobid FROM jobs")
@@ -478,8 +522,8 @@ class JobDB(object):
                 if r["continuation_jobid"] == "-":
                     job.append(select_series_id(r["jobid"]))
         return job
-    
-    
+
+
     def select_recent_series_id(self, recent_time):
         """ Return a list of lists of jobids (one for each series) which were modified in the last 'recent_time' """
         mintime = int(time.time() - misc.seconds(recent_time))
@@ -492,10 +536,10 @@ class JobDB(object):
 
 
     def select_regex_series_id(self, key, regex):
-        """ Return a list of lists of jobids (one for each series) in which the column 
-            'key' matches the regular expression 'regex' 
+        """ Return a list of lists of jobids (one for each series) in which the column
+            'key' matches the regular expression 'regex'
         """
-        
+
         job = []
         if( key in job_status_dict()):
             self.curs.execute("SELECT jobid FROM jobs WHERE " + key + " REGEXP ?",(regex))
@@ -504,87 +548,87 @@ class JobDB(object):
                     job.append(select_series_id(jobid))
         else:
             raise JobDBError(key + " not a valid key")
-        
+
         return job
-    
-    
-    
+
+
+
     def eligible_to_continue(self, job):
-        """ Return True if job is eligible to be continued, else return False 
-        
+        """ Return True if job is eligible to be continued, else return False
+
             Job must have jobstatus="C" and taskstatus="Incomplete" and auto=1, or else the job can not be continued.
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
         """
         if job["jobstatus"] != "C":
             return (False, job["jobid"], "Job not eligible to continue. jobstatus = " + job["jobstatus"])
-        
+
         if job["taskstatus"] != "Incomplete":
             return (False, job["jobid"], "Job not eligible to continue. taskstatus = " + job["taskstatus"])
-            
+
         if job["auto"] != 1:
             return (False, job["jobid"], "Job not eligible to continue. auto = " + str(bool(job["auto"])))
-        
+
         return (True, job["jobid"], None)
-    
-    
+
+
     def continue_job(self, jobid=None, job=None):
         """ Resubmit one job with given jobid.
-            
+
             Args:
                 jobid: jobid of the job to continue
                 job: (sqlite3.Row) If this is given, jobid is not necessary and is ignored if given
-            
+
             Raises:
                 EligibilityError if job not eligible to be continued
         """
-        
+
         if job == None:
             job = self.select_job(jobid)
-        
+
         eligible, id, msg = self.eligible_to_continue(job)
         if not eligible:
             raise EligibilityError(id, msg)
-        
+
         wd = os.getcwd()
         os.chdir( job["rundir"])
-        
+
         new_jobid = misc.submit(qsubstr=job["qsubstr"])
-        
+
         self.curs.execute("UPDATE jobs SET taskstatus='Continued', modifytime=?, continuation_jobid=? WHERE jobid=?",(int(time.time()),new_jobid,job["jobid"]))
         status = job_status_dict(jobid = new_jobid, jobname = job["jobname"], rundir = os.getcwd(), \
                    jobstatus = "?", auto = job["auto"], qsubstr = job["qsubstr"], nodes = job["nodes"], \
                    procs = job["procs"], walltime = job["walltime"])
         self.add(status)
-        
+
         os.chdir(wd)
-    
-    
+
+
     def continue_all(self):
         """Resubmit all jobs eligible to continue"""
         self.curs.execute("SELECT jobid FROM jobs WHERE auto=1 AND taskstatus='Incomplete' AND jobstatus='C'")
         for r in sql_iter(self.curs):
             self.continue_job(r["jobid"])
-    
-    
+
+
     def eligible_to_abort(self, job):
-        """ Check if job is eligible to be aborted 
-            
+        """ Check if job is eligible to be aborted
+
             Jobs are eligible to be aborted if:
                 jobstatus != "C"
                 or
                 (jobstatus == "C"
                 and
                 (taskstatus == "Incomplete" or taskstatus == "Check"))
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
@@ -594,49 +638,49 @@ class JobDB(object):
         elif job["taskstatus"] == "Incomplete" or job["taskstatus"] == "Check":
                 return (True, job["jobid"], None)
         return (False, job["jobid"], "Job not eligible to be aborted. jobstatus = " + job["jobstatus"] + " and taskstatus = " + job["taskstatus"])
-    
-    
+
+
     def abort_job(self, jobid=None, job=None):
         """ qdel job and mark job taskstatus as Aborted
-            
+
             Args:
                 jobid: jobid of the job to continue
                 job: (sqlite3.Row) If this is given, jobid is not necessary and is ignored if given
-            
+
             Raises:
                 EligibilityError if job not eligible to be continued
         """
-        
+
         if job == None:
             job = self.select_job(jobid)
-        
+
         eligible, id, msg = self.eligible_to_abort(job)
         if not eligible:
             raise EligibilityError(id, msg)
-        
+
         misc.delete(job["jobid"])
         self.curs.execute("UPDATE jobs SET taskstatus='Aborted', modifytime=? WHERE jobid=?",(int(time.time()),job["jobid"]))
         self.conn.commit()
-    
-    
+
+
     def eligible_to_delete(self, job):
-        """ Check if job is eligible to be aborted 
-            
+        """ Check if job is eligible to be aborted
+
             All jobs are eligible to be deleted
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
         """
         return (True, job["jobid"], None)
-    
-    
+
+
     def delete_job(self, jobid=None, job=None, series=False):
         """ qdel job if running, and delete job from the database.
-        
+
              Args:
                 jobid: jobid of the job to continue
                 job: (sqlite3.Row) If this is given, jobid is not necessary and is ignored if given
@@ -644,58 +688,58 @@ class JobDB(object):
         """
         if job == None:
             job = self.select_job(jobid)
-        
+
         if series == True:
             jobseries = select_series_id(job["jobid"])
         else:
             jobseries = [job["jobid"]]
-        
+
         for j in jobseries:
             misc.delete(j)
             self.curs.execute("DELETE from jobs WHERE jobid=?",(j,))
         self.conn.commit()
-    
-    
+
+
     def eligible_to_error(self, job):
-        """ Check if job is eligible to be marked as error 
-            
+        """ Check if job is eligible to be marked as error
+
             All jobs are eligible to be marked as error. (Should this exclude "Continued" jobs?)
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
         """
         return (True, job["jobid"], None)
-    
-    
+
+
     def error_job(self, message, jobid=None, job=None):
         """ Mark job taskstatus as 'Error: message'
-            
+
             Any job can be marked as error.  (Should this exclude "Continued" jobs?)
-            
+
             Args:
                 jobid: jobid of the job to mark as error
                 job: (sqlite3.Row) If this is given, jobid is not necessary and is ignored if given
-            
+
         """
         message = "Error: " + message
         if job == None:
             job = self.select_job(jobid)
         self.curs.execute("UPDATE jobs SET taskstatus=?, modifytime=? WHERE jobid=?",(message,int(time.time()),job["jobid"]))
         self.conn.commit()
-    
-    
+
+
     def eligible_to_reset(self, job):
         """ Check if job is eligible to be reset
-            
+
             Jobs are eligible to be reset if they are 'auto' jobs, and taskstatus == "Error:.*" or "Aborted"
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
@@ -705,38 +749,38 @@ class JobDB(object):
         if job["taskstatus"] != "Aborted" and not re.match( "Error:.*", job["taskstatus"]):
                 return (False, job["jobid"], "Job not eligible to be reset. taskstatus = " + job["taskstatus"])
         return (True, job["jobid"], None)
-    
-    
+
+
     def reset_job(self, jobid=None, job=None):
         """ Mark job taskstatus as 'Incomplete'
-        
+
             Jobs are eligible to be reset if they are 'auto' jobs, and taskstatus == "Error:.*" or "Aborted"
-            
+
             Args:
                 jobid: jobid of the job to mark as error
                 job: (sqlite3.Row) If this is given, jobid is not necessary and is ignored if given
-            
+
         """
         if job == None:
             job = self.select_job(jobid)
-        
+
         eligible, id, msg = self.eligible_to_reset(job)
         if not eligible:
             raise EligibilityError(id, msg)
-        
+
         self.curs.execute("UPDATE jobs SET taskstatus=?, modifytime=? WHERE jobid=?",("Incomplete",int(time.time()),job["jobid"]))
         self.conn.commit()
-    
-    
+
+
     def eligible_to_complete(self, job):
-        """ Check if job is eligible to be completed 
-            
+        """ Check if job is eligible to be completed
+
             Jobs are eligible to be completed if:
                 taskstatus != "Complete" and taskstatus != "Continued"
-            
+
             Args:
                 job: a sqlite3.Row, as obtained by self.select_job()
-            
+
             Returns:
                 (0, jobid, None) if eligible
                 (1, jobid, msg) if not eligible
@@ -744,52 +788,52 @@ class JobDB(object):
         if job["taskstatus"] == "Incomplete" or job["taskstatus"] == "Check":
             return (True, job["jobid"], None)
         return (False, job["jobid"], "Job not eligible to be completed. taskstatus = " + job["taskstatus"])
-    
-    
+
+
     def complete_job(self, jobid=None, job=None):
         """Mark job taskstatus as 'Complete'"""
-        
+
         if job == None:
             job = self.select_job(jobid)
-        
+
         eligible, id, msg = self.eligible_to_complete(job)
         if not eligible:
             raise EligibilityError(id, msg)
-        
+
         self.curs.execute("UPDATE jobs SET taskstatus='Complete', modifytime=?, elapsedtime=? WHERE jobid=?",(int(time.time()),None,job["jobid"]))
         self.conn.commit()
-    
-    
-    
-    
+
+
+
+
     def print_header(self):
         """Print header rows for record summary"""
-        print "{0:<12} {1:<24} {2:^5} {3:^5} {4:>12} {5:^1} {6:>12} {7:<24} {8:^1} {9:<12}".format("JobID","JobName","Nodes","Procs","Walltime","S","Runtime","Task","A","ContJobID") 
-        print "{0:-^12} {1:-^24} {2:-^5} {3:-^5} {4:->12} {5:-^1} {6:->12} {7:-<24} {8:-^1} {9:-^12}".format("-","-","-","-","-","-","-","-","-","-") 
-        
-    
+        print "{0:<12} {1:<24} {2:^5} {3:^5} {4:>12} {5:^1} {6:>12} {7:<24} {8:^1} {9:<12}".format("JobID","JobName","Nodes","Procs","Walltime","S","Runtime","Task","A","ContJobID")
+        print "{0:-^12} {1:-^24} {2:-^5} {3:-^5} {4:->12} {5:-^1} {6:->12} {7:-<24} {8:-^1} {9:-^12}".format("-","-","-","-","-","-","-","-","-","-")
+
+
     def print_record(self, r):
         """Print record summary
-        
-            r: dict-like object containing: "jobid", "jobname", "nodes", "procs", 
-                                            "walltime", "jobstatus", "elapsedtime", 
+
+            r: dict-like object containing: "jobid", "jobname", "nodes", "procs",
+                                            "walltime", "jobstatus", "elapsedtime",
                                             "taskstatus", "auto", and "continuation_jobid"
         """
-        
+
         d = dict(r)
-        
+
         for k in ["walltime", "elapsedtime"]:
             if d[k] == None:
                 d[k] = "-"
             elif isinstance(d[k], int):
                 d[k] = misc.strftimedelta(d[k])
-        
+
         print "{0:<12} {1:<24} {2:^5} {3:^5} {4:>12} {5:^1} {6:>12} {7:<24} {8:^1} {9:<12}".format(d["jobid"], d["jobname"], d["nodes"], d["procs"], d["walltime"], d["jobstatus"], d["elapsedtime"], d["taskstatus"], d["auto"], d["continuation_jobid"])
-    
-    
+
+
     def print_full_record(self, r):
         """Print record as list of key-val pairs.
-        
+
             r: a dict-like object
         """
         print "#Record:"
@@ -802,15 +846,15 @@ class JobDB(object):
             else:
                 print key, "=", r[key]
         print ""
-    
-    
+
+
     def print_job(self, jobid=None, job=None, full=False, series=False):
         """Print job with given jobid
-        
+
            If full: print key-val pairs for all fields
            If series: also print other jobs in the series
         """
-        
+
         if series:
             if job != None:
                 jobid = job["jobid"]
@@ -825,17 +869,17 @@ class JobDB(object):
         else:
             if job == None:
                 job = self.select_job(jobid)
-            
+
             if full:
                 self.print_full_record(job)
             else:
                 self.print_record(job)
-    
-    
+
+
     def print_selected(self, curs=None, full=False, series=False):
-        """Fetch and print jobs selected with SQL SELECT statement using cursor 'curs'. 
-           
-           
+        """Fetch and print jobs selected with SQL SELECT statement using cursor 'curs'.
+
+
            Arguments:
              curs: Fetch selected jobs from sqlite3 cursor 'curs'. If no 'curs' given, use self.curs.
              full: If True, print as key:val pair list, If (default) False, print single row summary in 'qstat' style.
@@ -857,13 +901,13 @@ class JobDB(object):
                         self.print_job(r["jobid"],full=full,series=series)
                 else:
                     self.print_record(r)
-    
-    
+
+
     def print_untracked(self, full=False):
         """Print untracked jobs.
-        
+
            Untracked jobs are stored in self.untracked after calling JobDB.update().
-            
+
             Arguments:
              full: If True, print as key:val pair list, If (default) False, print single row summary in 'qstat' style.
         """
@@ -880,11 +924,11 @@ class JobDB(object):
                 self.print_full_record(tmp)
             else:
                 self.print_record(tmp)
-    
-    
+
+
     def print_all(self, full=False, series=False):
         """Print all jobs
-        
+
            Arguments:
              full: If True, print as key:val pair list, If (default) False, print single row summary in 'qstat' style.
              series: If True, print records as groups of auto submitting job series. If (default) False, print in order found.
@@ -894,13 +938,13 @@ class JobDB(object):
         if not full:
             self.print_header()
         self.print_selected(full=full, series=series)
-    
-    
+
+
     def print_active(self, full=False, series=False):
         """Print active jobs
-            
+
            "Active" jobs are those with taskstatus='Incomplete' or 'Check'
-        
+
            Arguments:
              full: If True, print as key:val pair list, If (default) False, print single row summary in 'qstat' style.
              series: If True, print records as groups of auto submitting job series. If (default) False, print in order found.
@@ -910,7 +954,7 @@ class JobDB(object):
         if not full:
             self.print_header()
         self.print_selected(full=full, series=series)
-        
+
 
 
 # end class JobDB
@@ -918,7 +962,7 @@ class JobDB(object):
 
 def complete_job(jobid=None,dbpath=None,):
     """Mark the job as 'Complete' if possible
-    
+
        Arguments:
          dbpath: Path to JobDB database. If not given, use default database (see JobDB().__init__)
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
@@ -929,23 +973,23 @@ def complete_job(jobid=None,dbpath=None,):
         if jobid == None:
             raise PBSError("Could not determine jobid")
     db = JobDB(dbpath)
-    
+
     try:
         job = db.select_job(jobid)
     except JobDBError as e:
         raise e
-    
+
     try:
         db.complete_job(jobid)
     except EligibilityError as e:
         raise e
-    
+
     db.close()
 
 
 def error_job(message, jobid=None, dbpath=None):
     """Mark the job as 'Complete' if possible
-    
+
        Arguments:
          dbpath: Path to JobDB database. If not given, use default database (see JobDB().__init__)
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
@@ -954,16 +998,16 @@ def error_job(message, jobid=None, dbpath=None):
     if jobid == None:
         jobid = misc.job_id()
         if jobid == None:
-            raise PBSError("Could not determine jobid") 
+            raise PBSError("Could not determine jobid")
     db = JobDB(dbpath)
-    
+
     try:
         job = db.select_job(jobid)
     except JobDBError as e:
         raise e
-    
+
     db.error_job(message, job=job)
-    
+
     db.close()
 
 
