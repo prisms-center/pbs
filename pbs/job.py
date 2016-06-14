@@ -29,11 +29,13 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         pmem        "3800mb"
         qos         "flux"
         queue       "fluxoe"
+        exetime     "1100"
         message     "abe"
         email       "jdoe@umich.edu"
         priority    "-200"
         command     "echo \"hello\" > test.txt"
         auto        True
+        software    "torque"
 
         Only set to auto=True if the 'command' uses this pbs module to set itself as
             completed when it is completed.
@@ -45,18 +47,19 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
     def __init__(self, name="STDIN", account=None, nodes=None, ppn=None, walltime=None, #pylint: disable=too-many-arguments, too-many-locals
                  pmem=None, qos=None, queue=None, exetime=None, message="a", email=None,
-                 priority="0", command=None, auto=False, qsubstr=None, software=None):
+                 priority="0", command=None, auto=False, substr=None, software=None):
 
-        if qsubstr != None:
-            self.read(qsubstr)
+        if substr != None:
+            self.read(substr)
             return
 
         # Determines the software and loads the appropriate package
         if software is None:
             software = misc.getsoftware()
-        if software is "torque":
+        self.software = software
+        if self.software is "torque":
             import misc_torque as misc_pbs  #pylint: disable=redefined-outer-name
-        elif software is "slurm":
+        elif self.software is "slurm":
             #import misc_slurm as misc_pbs  #pylint: disable=redefined-outer-name
             import misc_torque as misc_pbs  #pylint: disable=redefined-outer-name
         else:
@@ -133,34 +136,69 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
     #
 
-    def qsub_string(self):
-        """Write this Job as a string"""
-        s = "#!/bin/sh\n"
-        #s += "#PBS -S /bin/sh\n"
-        s += "#SBATCH -J {0}\n".format(self.name)
-        #if self.exetime is not None:
-        #    s += "#PBS -a {0}\n".format(self.exetime)
-        if self.account is not None:
-            s += "#SBATCH -A {0}\n".format(self.account)
-        s += "#SBATCH -t {0}\n".format(self.walltime)
-        s += "#SBATCH -N {0}\n".format(self.nodes)
-        #if self.pmem is not None:
-        #    s += "#PBS -l pmem={0}\n".format(self.pmem)
-        #if self.qos is not None:
-        #    s += "#PBS -l qos={0}\n".format(self.qos)
-        s += "#SBATCH -p {0}\n".format(self.queue)
-        #if self.email != None and self.message != None:
-        #    s += "#PBS -M {0}\n".format(self.email)
-        #    s += "#PBS -m {0}\n".format(self.message)
-        #s += "#PBS -V\n"
-        #s += "#PBS -p {0}\n\n".format(self.priority)
-        #s += "#auto={0}\n\n".format(self.auto)
-        #s += "echo \"I ran on:\"\n"
-        #s += "cat $PBS_NODEFILE\n\n"
-        #s += "cd $PBS_O_WORKDIR\n"
-        s += "{0}\n".format(self.command)
+    def sub_string(self):   #pylint: disable=too-many-branches
+        """ Write Job as a string suitable for self.software """
+        if self.software.lower() == "slurm":
+            ###Write this Job as a string suitable for slurm
+            ### NOT USED:
+            ###    exetime
+            ###    priority
+            ###    auto
+            jobstr = "#!/bin/sh\n"
+            jobstr += "#SBATCH -J {0}\n".format(self.name)
+            if self.account is not None:
+                jobstr += "#SBATCH -A {0}\n".format(self.account)
+            jobstr += "#SBATCH -t {0}\n".format(self.walltime)
+            jobstr += "#SBATCH -n {0}\n".format(self.nodes*self.ppn)
+            if self.pmem is not None:
+                jobstr += "#SBATCH --mem-per-cpu={0}\n".format(self.pmem)
+            if self.qos is not None:
+                jobstr += "#SBATCH --qos={0}\n".format(self.qos)
+            if self.email != None and self.message != None:
+                jobstr += "#SBATCH --mail-user={0}\n".format(self.email)
+                if 'b' in self.message:
+                    jobstr += "#SBATCH --mail-type=BEGIN\n"
+                if 'e' in self.message:
+                    jobstr += "#SBATCH --mail-type=END\n"
+                if 'a' in self.message:
+                    jobstr += "#SBATCH --mail-type=FAIL\n"
+            jobstr += "#SBATCH -N {0}\n".format(self.nodes)
+            jobstr += "#SBATCH -p {0}\n".format(self.queue)
+            jobstr += "{0}\n".format(self.command)
 
-        return s
+            return jobstr
+
+        else:
+            ###Write this Job as a string suitable for torque###
+
+            jobstr = "#!/bin/sh\n"
+            jobstr += "#PBS -S /bin/sh\n"
+            jobstr += "#PBS -N {0}\n".format(self.name)
+            if self.exetime is not None:
+                jobstr += "#PBS -a {0}\n".format(self.exetime)
+            if self.account is not None:
+                jobstr += "#PBS -A {0}\n".format(self.account)
+            jobstr += "#PBS -l walltime={0}\n".format(self.walltime)
+            jobstr += "#PBS -l nodes={0}:ppn={1}\n".format(self.nodes, self.ppn)
+            if self.pmem is not None:
+                jobstr += "#PBS -l pmem={0}\n".format(self.pmem)
+            if self.qos is not None:
+                jobstr += "#PBS -l qos={0}\n".format(self.qos)
+            jobstr += "#PBS -q {0}\n".format(self.queue)
+            if self.email != None and self.message != None:
+                jobstr += "#PBS -M {0}\n".format(self.email)
+                jobstr += "#PBS -m {0}\n".format(self.message)
+            jobstr += "#PBS -V\n"
+            jobstr += "#PBS -p {0}\n\n".format(self.priority)
+            jobstr += "#auto={0}\n\n".format(self.auto)
+            jobstr += "echo \"I ran on:\"\n"
+            jobstr += "cat $PBS_NODEFILE\n\n"
+            jobstr += "cd $PBS_O_WORKDIR\n"
+            jobstr += "{0}\n".format(self.command)
+
+            return jobstr
+
+
 
     def script(self, filename="submit.sh"):
         """Write this Job as a bash script
@@ -170,7 +208,7 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
         """
         with open(filename, "w") as myfile:
-            myfile.write(self.qsub_string())
+            myfile.write(self.sub_string())
 
     def submit(self, add=True, dbpath=None, configpath=None):
         """Submit this Job using qsub
@@ -183,7 +221,7 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         """
 
         try:
-            self.jobID = misc_pbs.submit(qsubstr=self.qsub_string())
+            self.jobID = misc_pbs.submit(qsubstr=self.sub_string())
         except misc.PBSError as e:  #pylint: disable=invalid-name
             raise e
 
@@ -191,7 +229,7 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
             db = jobdb.JobDB(dbpath=dbpath, configpath=configpath) #pylint: disable=invalid-name
             status = jobdb.job_status_dict(jobid=self.jobID, jobname=self.name,
                                            rundir=os.getcwd(), jobstatus="?",
-                                           auto=self.auto, qsubstr=self.qsub_string(),
+                                           auto=self.auto, qsubstr=self.sub_string(),
                                            walltime=misc.seconds(self.walltime),
                                            nodes=self.nodes, procs=self.nodes*self.ppn)
             db.add(status)
