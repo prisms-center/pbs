@@ -9,6 +9,7 @@ import StringIO
 ### Local ###
 import jobdb
 import misc
+global misc_pbs
 
 class Job(object):  #pylint: disable=too-many-instance-attributes
     """A qsub Job object.
@@ -42,6 +43,8 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
     """
 
+    global misc_pbs
+
     def __init__(self, name="STDIN", account=None, nodes=None, ppn=None, walltime=None, #pylint: disable=too-many-arguments, too-many-locals
                  pmem=None, qos=None, queue=None, exetime=None, message="a", email=None,
                  priority="0", command=None, auto=False, substr=None, software=None):
@@ -55,14 +58,11 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
             software = misc.getsoftware()
         self.software = software
         if self.software is "torque":
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.software is "slurm":
             #import misc_slurm as misc_pbs  #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         else:
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
         # Declares a name for the job. The name specified may be up to and including

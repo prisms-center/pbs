@@ -12,6 +12,7 @@ import re
 import json
 
 import misc
+global misc_pbs
 
 class JobDBError(Exception):
     """ Custom error class for JobDBs"""
@@ -213,16 +214,13 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
 
         if self.config["software"] == "torque":
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.config["software"] == "slurm":
             # import misc_slurm as misc
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         else:
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
         # list of dict() from misc.job_status for jobs not tracked in database:
