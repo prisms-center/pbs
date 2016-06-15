@@ -57,7 +57,7 @@ def qstat(jobid=None, username=getlogin(), full=False, version=int(getversion().
         opt += jobid
 
     # call 'qstat' using subprocess
-    print opt
+    # print opt
     p = subprocess.Popen(opt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)     #pylint: disable=invalid-name
     stdout, stderr = p.communicate()        #pylint: disable=unused-variable
 

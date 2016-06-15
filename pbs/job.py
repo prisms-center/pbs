@@ -55,12 +55,15 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
             software = misc.getsoftware()
         self.software = software
         if self.software is "torque":
-            import misc_torque as misc_pbs  #pylint: disable=redefined-outer-name
+            global misc_pbs
+            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.software is "slurm":
             #import misc_slurm as misc_pbs  #pylint: disable=redefined-outer-name
-            import misc_torque as misc_pbs  #pylint: disable=redefined-outer-name
+            global misc_pbs
+            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         else:
-            import misc_torque as misc_pbs  #pylint: disable=redefined-outer-name
+            global misc_pbs
+            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
         # Declares a name for the job. The name specified may be up to and including
         # 15 characters in length. It must consist of printable, non white space characters
