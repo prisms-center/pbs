@@ -9,7 +9,7 @@ import time
 import sys
 from misc import getversion, getlogin, seconds, PBSError
 
-def qstat(jobid=None, username=getlogin(), full=False, version=int(getversion().split(".")[0])):
+def _qstat(jobid=None, username=getlogin(), full=False, version=int(getversion().split(".")[0])):
     """Return the stdout of qstat minus the header lines.
 
        By default, 'username' is set to the current user.
@@ -82,7 +82,7 @@ def job_id(all=False, name=None):       #pylint: disable=redefined-builtin
     """
     if all or name is not None:
         jobid = []
-        stdout = qstat()
+        stdout = _qstat()
         sout = StringIO.StringIO(stdout)
         for line in sout:
             if name is not None:
@@ -110,11 +110,11 @@ def job_rundir(jobid):
 
     if isinstance(id, (list)):
         for i in jobid:
-            stdout = qstat(jobid=i, full=True)
+            stdout = _qstat(jobid=i, full=True)
             match = re.search(",PWD=(.*),", stdout)
             rundir[i] = match.group(1)
     else:
-        stdout = qstat(jobid=jobid, full=True)
+        stdout = _qstat(jobid=jobid, full=True)
         match = re.search(",PWD=(.*),", stdout)
         rundir[i] = match.group(1)
     return rundir
@@ -135,7 +135,7 @@ def job_status(jobid=None):
     """
     status = dict()
 
-    stdout = qstat(jobid=jobid, full=True)
+    stdout = _qstat(jobid=jobid, full=True)
     sout = StringIO.StringIO(stdout)
 
 ### TODO: figure out why jobstatus is being initialized as a None vs as a dict() and then checked for content ### pylint: disable=fixme
@@ -227,13 +227,13 @@ def job_status(jobid=None):
 
     return status
 
-def submit(qsubstr):
+def submit(substr):
     """Submit a PBS job using qsub.
 
-       qsubstr: The submit script string
+       substr: The submit script string
     """
 
-    m = re.search(r"-N\s+(.*)\s", qsubstr)       #pylint: disable=invalid-name
+    m = re.search(r"-N\s+(.*)\s", substr)       #pylint: disable=invalid-name
     if m:
         jobname = m.group(1)        #pylint: disable=unused-variable
     else:
@@ -243,7 +243,7 @@ def submit(qsubstr):
 
     p = subprocess.Popen(   #pylint: disable=invalid-name
         "qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    stdout, stderr = p.communicate(input=qsubstr)       #pylint: disable=unused-variable
+    stdout, stderr = p.communicate(input=substr)       #pylint: disable=unused-variable
     print stdout[:-1]
     if re.search("error", stdout):
         raise PBSError(0, "PBS Submission error.\n" + stdout + "\n" + stderr)

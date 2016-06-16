@@ -1,5 +1,6 @@
 """ JobDB class and associated functions and methods """
 #pylint: disable=too-many-lines
+global pbs_misc
 
 import sqlite3
 import os
@@ -12,7 +13,6 @@ import re
 import json
 
 import misc
-global misc_pbs
 
 class JobDBError(Exception):
     """ Custom error class for JobDBs"""
@@ -212,13 +212,15 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
         self.hostname = socket.gethostname()
         self.connect(dbpath, configpath)
 
+        global misc_pbs
+
         if self.config["software"] == "torque":
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.config["software"] == "slurm":
             # import misc_slurm as misc
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+            misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
         else:
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque

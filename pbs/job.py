@@ -9,7 +9,6 @@ import StringIO
 ### Local ###
 import jobdb
 import misc
-global misc_pbs
 
 class Job(object):  #pylint: disable=too-many-instance-attributes
     """A qsub Job object.
@@ -43,7 +42,6 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
     """
 
-    global misc_pbs
 
     def __init__(self, name="STDIN", account=None, nodes=None, ppn=None, walltime=None, #pylint: disable=too-many-arguments, too-many-locals
                  pmem=None, qos=None, queue=None, exetime=None, message="a", email=None,
@@ -57,11 +55,13 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         if software is None:
             software = misc.getsoftware()
         self.software = software
+
+        global misc_pbs
+
         if self.software is "torque":
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.software is "slurm":
-            #import misc_slurm as misc_pbs  #pylint: disable=redefined-outer-name
-            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+            misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
         else:
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
@@ -163,7 +163,8 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
                 if 'a' in self.message:
                     jobstr += "#SBATCH --mail-type=FAIL\n"
             jobstr += "#SBATCH -N {0}\n".format(self.nodes)
-            jobstr += "#SBATCH -p {0}\n".format(self.queue)
+            if self.queue is not None:
+                jobstr += "#SBATCH -p {0}\n".format(self.queue)
             jobstr += "{0}\n".format(self.command)
 
             return jobstr
@@ -184,7 +185,8 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
                 jobstr += "#PBS -l pmem={0}\n".format(self.pmem)
             if self.qos is not None:
                 jobstr += "#PBS -l qos={0}\n".format(self.qos)
-            jobstr += "#PBS -q {0}\n".format(self.queue)
+            if self.queue is not None:
+                jobstr += "#PBS -q {0}\n".format(self.queue)
             if self.email != None and self.message != None:
                 jobstr += "#PBS -M {0}\n".format(self.email)
                 jobstr += "#PBS -m {0}\n".format(self.message)
@@ -221,7 +223,7 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         """
 
         try:
-            self.jobID = misc_pbs.submit(qsubstr=self.sub_string())
+            self.jobID = misc_pbs.submit(substr=self.sub_string())
         except misc.PBSError as e:  #pylint: disable=invalid-name
             raise e
 
