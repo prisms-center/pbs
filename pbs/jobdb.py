@@ -1066,11 +1066,11 @@ def complete_job(jobid=None, dbpath=None,):
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
                 environment variable 'PBS_JOBID'
     """
+    db = JobDB(dbpath)  #pylint: disable=invalid-name
     if jobid is None:
         jobid = misc_pbs.job_id()
         if jobid is None:
             raise misc.PBSError(0, "Could not determine jobid")
-    db = JobDB(dbpath)  #pylint: disable=invalid-name
 
     try:
         job = db.select_job(jobid)  #pylint: disable=unused-variable

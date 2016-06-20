@@ -162,7 +162,8 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
                     jobstr += "#SBATCH --mail-type=END\n"
                 if 'a' in self.message:
                     jobstr += "#SBATCH --mail-type=FAIL\n"
-            jobstr += "#SBATCH -N {0}\n".format(self.nodes)
+            # SLURM does assignment to no. of nodes automatically
+            # jobstr += "#SBATCH -N {0}\n".format(self.nodes)
             if self.queue is not None:
                 jobstr += "#SBATCH -p {0}\n".format(self.queue)
             jobstr += "{0}\n".format(self.command)
