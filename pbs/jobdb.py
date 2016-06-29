@@ -1067,6 +1067,18 @@ def complete_job(jobid=None, dbpath=None,):
                 environment variable 'PBS_JOBID'
     """
     db = JobDB(dbpath)  #pylint: disable=invalid-name
+
+    if db.config["software"] == "torque":
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+    elif db.config["software"] == "slurm":
+        # import misc_slurm as misc
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
+    else:
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+
     if jobid is None:
         jobid = misc_pbs.job_id()
         if jobid is None:
@@ -1093,11 +1105,11 @@ def error_job(message, jobid=None, dbpath=None):
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
                 environment variable 'PBS_JOBID'
     """
+    db = JobDB(dbpath)  #pylint: disable=invalid-name
     if jobid is None:
         jobid = misc_pbs.job_id()
         if jobid is None:
             raise misc.PBSError(0, "Could not determine jobid")
-    db = JobDB(dbpath)  #pylint: disable=invalid-name
 
     try:
         job = db.select_job(jobid)
