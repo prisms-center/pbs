@@ -342,8 +342,20 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
 
         # update jobstatus
 
+        # Parse our hostname so we can only select jobs from THIS host
+        #   Otherwise, if we're on a multiple-clusters-same-home setup,
+        #   we may incorrectly update jobs from one cluster onto the other
+        m = m = re.search(r"(.*?)(?=[^a-zA-Z0-9]*login.*)", self.hostname)   #pylint: disable=invalid-name
+        if m:
+            hostname_regex = m.group(1) + ".*"
+        else:
+            hostname_regex = self.hostname + ".*"
+
         # select jobs that are not yet marked complete
-        self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C'")
+        # self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C'")
+        # self.curs.execute("SELECT jobid FROM jobs WHERE hostname REGEXP ")
+        self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C' AND hostname REGEXP ?",
+                          (hostname_regex, ))
 
         # newstatus will contain the updated info
         newstatus = dict()
