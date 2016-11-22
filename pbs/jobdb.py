@@ -1,5 +1,6 @@
 """ JobDB class and associated functions and methods """
 #pylint: disable=too-many-lines
+global pbs_misc
 
 import sqlite3
 import os
@@ -211,18 +212,17 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
         self.hostname = socket.gethostname()
         self.connect(dbpath, configpath)
 
+        global misc_pbs
+
         if self.config["software"] == "torque":
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
         elif self.config["software"] == "slurm":
             # import misc_slurm as misc
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
-            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+            misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
         else:
             # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
-            global misc_pbs
             misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
         # list of dict() from misc.job_status for jobs not tracked in database:
@@ -342,8 +342,20 @@ class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-
 
         # update jobstatus
 
+        # Parse our hostname so we can only select jobs from THIS host
+        #   Otherwise, if we're on a multiple-clusters-same-home setup,
+        #   we may incorrectly update jobs from one cluster onto the other
+        m = m = re.search(r"(.*?)(?=[^a-zA-Z0-9]*login.*)", self.hostname)   #pylint: disable=invalid-name
+        if m:
+            hostname_regex = m.group(1) + ".*"
+        else:
+            hostname_regex = self.hostname + ".*"
+
         # select jobs that are not yet marked complete
-        self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C'")
+        # self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C'")
+        # self.curs.execute("SELECT jobid FROM jobs WHERE hostname REGEXP ")
+        self.curs.execute("SELECT jobid FROM jobs WHERE jobstatus!='C' AND hostname REGEXP ?",
+                          (hostname_regex, ))
 
         # newstatus will contain the updated info
         newstatus = dict()
@@ -1066,11 +1078,23 @@ def complete_job(jobid=None, dbpath=None,):
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
                 environment variable 'PBS_JOBID'
     """
+    db = JobDB(dbpath)  #pylint: disable=invalid-name
+
+    if db.config["software"] == "torque":
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+    elif db.config["software"] == "slurm":
+        # import misc_slurm as misc
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
+    else:
+        # import misc_torque as misc_pbs      #pylint: disable=redefined-outer-name
+        misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+
     if jobid is None:
         jobid = misc_pbs.job_id()
         if jobid is None:
             raise misc.PBSError(0, "Could not determine jobid")
-    db = JobDB(dbpath)  #pylint: disable=invalid-name
 
     try:
         job = db.select_job(jobid)  #pylint: disable=unused-variable
@@ -1093,11 +1117,11 @@ def error_job(message, jobid=None, dbpath=None):
          jobid: jobid str of job to mark 'Complete'. If not given, uses current job id from the
                 environment variable 'PBS_JOBID'
     """
+    db = JobDB(dbpath)  #pylint: disable=invalid-name
     if jobid is None:
         jobid = misc_pbs.job_id()
         if jobid is None:
             raise misc.PBSError(0, "Could not determine jobid")
-    db = JobDB(dbpath)  #pylint: disable=invalid-name
 
     try:
         job = db.select_job(jobid)
