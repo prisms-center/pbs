@@ -52,7 +52,7 @@ def getversion(software=None):
         sout = StringIO.StringIO(stdout)
 
         # return the version number
-        return sout.read().rstrip("\n").lstrip("version: ")
+        return sout.read().rstrip("\n").lower().lstrip("version: ")
     elif software is "slurm":
         opt = ["squeue", "--version"]
 

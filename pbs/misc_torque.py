@@ -9,7 +9,7 @@ import time
 import sys
 from misc import getversion, getlogin, seconds, PBSError
 
-def _qstat(jobid=None, username=getlogin(), full=False, version=int(getversion().split(".")[0])):
+def _qstat(jobid=None, username=getlogin(), full=False, version=getversion()):
     """Return the stdout of qstat minus the header lines.
 
        By default, 'username' is set to the current user.
@@ -20,7 +20,7 @@ def _qstat(jobid=None, username=getlogin(), full=False, version=int(getversion()
     """
 
     # -u and -f contradict in earlier versions of Torque
-    if full and username is not None and (version < 5.0 and jobid is None):
+    if full and username is not None and int(version.split('.')[0]) < 5 and jobid is None:
         # First get all jobs by the user
         qopt = ["qselect"]
         qopt += ["-u", username]

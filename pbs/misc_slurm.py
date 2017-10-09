@@ -14,7 +14,7 @@ import time
 ### Internal ###
 from pbs.misc import getversion, getlogin, seconds, PBSError
 
-def _squeue(jobid=None, username=getlogin(), full=False, version=int(getversion().split(".")[0]), sformat=None):    #pylint: disable=unused-argument
+def _squeue(jobid=None, username=getlogin(), full=False, version=getversion(), sformat=None):    #pylint: disable=unused-argument
     """Return the stdout of squeue minus the header lines.
 
        By default, 'username' is set to the current user.
