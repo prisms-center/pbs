@@ -62,9 +62,9 @@ Jobs not marked 'auto' are shown with the status "Check" in 'pstat' until the us
         git clone https://github.com/prisms-center/pbs.git
         cd pbs
 
-2. Checkout the branch containing the version you wish to install. Latest is ``v1.0.0``:
+2. Checkout the branch containing the version you wish to install. Latest is ``2.X``:
 
-        git checkout v1.0.0
+        git checkout 2.X
 
 2. From the root directory of the repository:
 
