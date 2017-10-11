@@ -224,7 +224,8 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         """
 
         try:
-            self.jobID = misc_pbs.submit(substr=self.sub_string())
+            self.jobID = misc_pbs.submit(substr=self.sub_string(), 
+                                         write_submit_script=db.config.get("write_submit_script", False))
         except misc.PBSError as e:  #pylint: disable=invalid-name
             raise e
 

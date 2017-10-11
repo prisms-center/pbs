@@ -227,26 +227,47 @@ def job_status(jobid=None):
 
     return status
 
-def submit(substr):
+def submit(substr, write_submit_script=False):
     """Submit a PBS job using qsub.
 
-       substr: The submit script string
+    Parameters
+    ----------
+    substr: str
+        The submit script string
+    
+    write_submit_script: bool
+        If true, submit via file skipping lines containing '#PBS -N'; otherwise, submit via commandline
     """
-
-    m = re.search(r"-N\s+(.*)\s", substr)       #pylint: disable=invalid-name
+    m = re.search(r"#PBS\s+-N\s+(.*)\s", substr)       #pylint: disable=invalid-name
     if m:
         jobname = m.group(1)        #pylint: disable=unused-variable
     else:
         raise PBSError(
             None,
-            r"Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string.")
+            r"""Error in pbs.misc.submit(). Jobname ("#PBS\s+-N\s+(.*)\s") not found in submit string.""")
 
-    p = subprocess.Popen(   #pylint: disable=invalid-name
-        "qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    stdout, stderr = p.communicate(input=substr)       #pylint: disable=unused-variable
+    if write_submit_script:
+        if os.path.exists(jobname):
+            index = 0
+            while os.path.exists(jobname + ".bak." + str(index)):
+                index += 1
+            print "Backing up existing submit script:", jobname, "->", jobname + ".bak." + str(index)
+            os.rename(jobname, jobname + ".bak." + str(index))
+        # write submit script, without -N line
+        with open(jobname, 'w') as f:
+            for line in substr.splitlines():
+                if not re.search(r"#PBS\s+-N\s+(.*)\s", line)
+                    f.write(line)
+        p = subprocess.Popen(   #pylint: disable=invalid-name
+            ["qsub", jobname], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        stdout, stderr = p.communicate()       #pylint: disable=unused-variable
+    else:
+        p = subprocess.Popen(   #pylint: disable=invalid-name
+            "qsub", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        stdout, stderr = p.communicate(input=substr)       #pylint: disable=unused-variable
     print stdout[:-1]
     if re.search("error", stdout):
-        raise PBSError(0, "PBS Submission error.\n" + stdout + "\n" + stderr)
+        raise PBSError(0, "Submission error.\n" + stdout + "\n" + stderr)
     else:
         jobid = stdout.split(".")[0]
         return jobid

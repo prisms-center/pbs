@@ -178,33 +178,59 @@ def regexp(pattern, string):
     return re.match(pattern, string) is not None
 
 class JobDB(object):    #pylint: disable=too-many-instance-attributes, too-many-public-methods
-    """A PBS Job Database object"""
+    """A Job Database object
+    
+    Parameters
+    ----------
+    dbpath: str (optional)
+        Database location. If dbpath is not given, the default location is 
+        determined as follows:
+            If the PBS_JOB_DB environment variable exists, set dbpath to
+                "$PBS_JOB_DB/jobs.db" file.
+            Else, set dbpath to "$HOME/.pbs/jobs.db", where $HOME is the user's
+                home directory
+    
+    configpath: str (optional)
+        Configuration file location. If configpath is not given, the default 
+        location is determined as follows:
+            If the PBS_JOB_DB environment variable exists, set configpath to
+                "$PBS_JOB_DB/config.json" file.
+            Else, set configpath to "$HOME/.pbs/config.json", where $HOME is
+                the user's home directory
+    
+    Attributes
+    ----------
+    conn: sqlite3.Connection
+        This stores a Connection to the jobs database.
+    
+    curs: sqlite3.Cursor
+        This stores a Cursor for the jobs database.
+    
+    username: str
+        Current username
+    
+    hostname: str
+        Current hostname
+    
+    config: dict
+        Configuration data, with keys:
+        
+            "software": str
+                "torque" or "slurm". This is typically automatically detected.
+            
+            "version": str
+                Software version number
+            
+            "write_submit_script": bool (optional, default=False)
+                If True, write the submit script as a file and then submit it.
+                The default behaviour (False) is to submit via the command line.
+    
+    untracked: list of dict
+        Lists user jobs that are not being tracked in the jobs database.
+    
+    """
 
     def __init__(self, dbpath=None, configpath=None):
-        """Construct a PBS Job Database object.
-
-           Usually this is called without arguments (pbs.JobDB()) to open or create a
-            database in the default location.
-
-           If dbpath is not given, the default location is determined as follows:
-             If the PBS_JOB_DB environment variable exists, set dbpath to
-                "$PBS_JOB_DB/jobs.db" file.
-             Else, set dbpath to "$HOME/.pbs/jobs.db", where $HOME is the user's
-                home directory
-           Else:
-             dbpath: path to a JobDB database file.
-
-           If configpath is not given, the default location is determined as follows:
-             If the PBS_JOB_DB environment variable exists, set configpath to
-                "$PBS_JOB_DB/config.json" file.
-             Else, set configpath to "$HOME/.pbs/config.json", where $HOME is
-                the user's home directory
-           Else:
-             configpath: path to a pbs config file.
-
-
-        """
-
         self.conn = None
         self.curs = None
 
