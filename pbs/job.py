@@ -223,6 +223,7 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
 
         """
 
+        db = jobdb.JobDB(dbpath=dbpath, configpath=configpath) #pylint: disable=invalid-name                                       
         try:
             self.jobID = misc_pbs.submit(substr=self.sub_string(), 
                                          write_submit_script=db.config.get("write_submit_script", False))
@@ -230,14 +231,13 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
             raise e
 
         if add:
-            db = jobdb.JobDB(dbpath=dbpath, configpath=configpath) #pylint: disable=invalid-name
             status = jobdb.job_status_dict(jobid=self.jobID, jobname=self.name,
                                            rundir=os.getcwd(), jobstatus="?",
                                            auto=self.auto, qsubstr=self.sub_string(),
                                            walltime=misc.seconds(self.walltime),
                                            nodes=self.nodes, procs=self.nodes*self.ppn)
             db.add(status)
-            db.close()
+        db.close()
 
 
     def read(self, qsubstr):    #pylint: disable=too-many-branches, too-many-statements

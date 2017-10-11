@@ -256,8 +256,8 @@ def submit(substr, write_submit_script=False):
         # write submit script, without -N line
         with open(jobname, 'w') as f:
             for line in substr.splitlines():
-                if not re.search(r"#PBS\s+-N\s+(.*)\s", line)
-                    f.write(line)
+                if not re.search(r"#PBS\s+-N\s+(.*)", line):
+                    f.write(line + '\n')
         p = subprocess.Popen(   #pylint: disable=invalid-name
             ["qsub", jobname], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         stdout, stderr = p.communicate()       #pylint: disable=unused-variable
