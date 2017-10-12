@@ -270,7 +270,8 @@ def submit(substr, write_submit_script=False):
         The submit script string
     
     write_submit_script: bool
-        If true, submit via file skipping lines containing '#PBS -N'; otherwise, submit via commandline
+        If true, submit via file skipping lines containing '#SBATCH -J'; 
+        otherwise, submit via commandline
     """
 
     m = re.search(r"#SBATCH\s+-J\s+(.*)\s", substr)       #pylint: disable=invalid-name
