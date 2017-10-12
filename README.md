@@ -82,6 +82,16 @@ Jobs not marked 'auto' are shown with the status "Check" in 'pstat' until the us
 On flux, you can use my installation by including ```/scratch/prismsproject_flux/bpuchala/Public/pythonmodules``` in your PYTHONPATH, and ```/scratch/prismsproject_flux/bpuchala/Public/scripts``` in your PATH. It may be necessary to also run ```module load python/2.7.5```. This could be placed in your ```.bash_profile```.
 
 
+## Configuration
+
+Some configuration is possible:
+
+- ``PBS_JOB_DB``: (optional, default=``$HOME/.pbs``) The jobs database is stored at ``$PBS_JOB_DB/jobs.db``.
+- ``PBS_JOB_DB/config.json``: A JSON configuration file with a dictionary storing: 
+    - ``"software"``: (str) the detected job submission software (``"torque"`` or ``"slurm"``)
+    - ``"version"``: (str) the detected software version number
+    - ``"write_submit_script"``: (bool, optional) If ``true``, submit jobs by first writing a submit script file and then submitting it. Otherwise, by default, the job is submitted via the command line.
+
 
 ## Documentation
 
