@@ -273,7 +273,7 @@ def submit(substr):
     else:
         raise PBSError(
             None,
-            r"""Error in pbs.misc.submit(). Jobname ("#SBATCH\s+-N\s+(.*)\s") not found in submit string.""")
+            r"""Error in pbs.misc.submit(). Jobname ("#SBATCH\s+-J\s+(.*)\s") not found in submit string.""")
 
     if write_submit_script:
         if os.path.exists(jobname):
@@ -285,7 +285,7 @@ def submit(substr):
         # write submit script, without -N line
         with open(jobname, 'w') as f:
             for line in substr.splitlines():
-                if not re.search(r"SBATCH\s+-N\s+(.*)", line):
+                if not re.search(r"SBATCH\s+-J\s+(.*)", line):
                     f.write(line + '\n')
         p = subprocess.Popen(   #pylint: disable=invalid-name
             ["sbatch", jobname], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
