@@ -261,7 +261,7 @@ def job_status(jobid=None):
 
     return status
 
-def submit(substr):
+def submit(substr, write_submit_script=False):
     """Submit a PBS job using sbatch.
 
        substr: The submit script string
