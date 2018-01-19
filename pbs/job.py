@@ -57,13 +57,12 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
         self.software = software
 
         global misc_pbs
-
-        if self.software is "torque":
-            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
-        elif self.software is "slurm":
-            misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
-        else:
-            misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+        if self.software.strip() == "torque":
+		misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
+	elif self.software.strip() == "slurm":
+		misc_pbs = __import__("pbs.misc_slurm", globals(), locals(), [], -1).misc_slurm
+	else:
+		misc_pbs = __import__("pbs.misc_torque", globals(), locals(), [], -1).misc_torque
 
         # Declares a name for the job. The name specified may be up to and including
         # 15 characters in length. It must consist of printable, non white space characters
@@ -222,7 +221,6 @@ class Job(object):  #pylint: disable=too-many-instance-attributes
            Raises PBSError if error submitting the job.
 
         """
-
         try:
             self.jobID = misc_pbs.submit(substr=self.sub_string())
         except misc.PBSError as e:  #pylint: disable=invalid-name
