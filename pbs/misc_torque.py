@@ -232,7 +232,6 @@ def submit(substr):
 
        substr: The submit script string
     """
-
     m = re.search(r"-N\s+(.*)\s", substr)       #pylint: disable=invalid-name
     if m:
         jobname = m.group(1)        #pylint: disable=unused-variable

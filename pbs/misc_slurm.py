@@ -266,15 +266,14 @@ def submit(substr):
 
        substr: The submit script string
     """
-
     m = re.search(r"-J\s+(.*)\s", substr)       #pylint: disable=invalid-name
     if m:
         jobname = m.group(1)        #pylint: disable=unused-variable
     else:
         raise PBSError(
-            None,
+            0,
             r"Error in pbs.misc.submit(). Jobname (\"-N\s+(.*)\s\") not found in submit string.")
-
+    
     p = subprocess.Popen(   #pylint: disable=invalid-name
         "sbatch", stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = p.communicate(input=substr)       #pylint: disable=unused-variable
